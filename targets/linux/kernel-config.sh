@@ -20,7 +20,7 @@ cfg --disable CONFIG_EFI
 # Sv39 only: no 4- or 5-level page tables (also forced via no4lvl/no5lvl in
 # bootargs; belt and braces).
 cfg --disable CONFIG_RISCV_MMU_SV48 2>/dev/null || true
-cfg --set-str CONFIG_INITRAMFS_SOURCE "/build/initramfs"
+cfg --set-str CONFIG_INITRAMFS_SOURCE "/build/initramfs.list"
 cfg --enable CONFIG_SERIAL_8250
 cfg --enable CONFIG_SERIAL_8250_CONSOLE
 cfg --enable CONFIG_SERIAL_OF_PLATFORM

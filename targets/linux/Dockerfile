@@ -51,11 +51,13 @@ RUN cd busybox-${BUSYBOX_VERSION} && \
     if riscv64-linux-musl-objdump -d busybox | grep -E '^\s+\w+:\s+\w+\s+f(l|s)[wd]\s'; then \
         echo 'FP instructions found in busybox'; exit 1; fi
 
-# --- Initramfs tree.
+# --- Initramfs: cpio file-list form so device nodes (/dev/console,
+# /dev/ttyS0) can be declared without root.
 COPY initramfs-init /build/initramfs/init
-RUN cd /build/initramfs && mkdir -p bin sbin proc sys dev etc tmp && \
-    cp /build/busybox-${BUSYBOX_VERSION}/busybox bin/busybox && \
-    chmod +x init bin/busybox
+COPY initramfs.list /build/initramfs.list
+RUN mkdir -p /build/initramfs/bin && \
+    cp /build/busybox-${BUSYBOX_VERSION}/busybox /build/initramfs/bin/busybox && \
+    chmod +x /build/initramfs/init /build/initramfs/bin/busybox
 
 # --- Kernel: defconfig, then force the target platform down to
 # rv64imac / single hart / soft-float, initramfs baked in.
