@@ -42,6 +42,7 @@ RUN cd linux-${KERNEL_VERSION} && \
 RUN cd busybox-${BUSYBOX_VERSION} && \
     make CROSS_COMPILE=riscv64-linux-musl- defconfig && \
     sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config && \
+    sed -i 's/^CONFIG_TC=y/# CONFIG_TC is not set/' .config && \
     make CROSS_COMPILE=riscv64-linux-musl- -j$(nproc) busybox && \
     file busybox | grep -q 'statically linked'
 
