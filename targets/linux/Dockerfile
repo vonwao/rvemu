@@ -6,7 +6,7 @@ FROM debian:bookworm-20250630
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential gcc-riscv64-linux-gnu libc6-dev-riscv64-cross flex bison bc libssl-dev \
     libelf-dev cpio xz-utils wget ca-certificates device-tree-compiler \
-    python3 file && rm -rf /var/lib/apt/lists/*
+    python3 file git rsync && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 # kernel.org's CDN is unreachable from the build network; the kernel comes
@@ -20,12 +20,27 @@ RUN wget -q https://github.com/torvalds/linux/archive/refs/tags/v${KERNEL_VERSIO
     wget -q https://github.com/riscv-software-src/opensbi/archive/refs/tags/v${OPENSBI_VERSION}.tar.gz -O opensbi-${OPENSBI_VERSION}.tar.gz && \
     tar xf linux-${KERNEL_VERSION}.tar.gz && tar xf busybox-${BUSYBOX_VERSION}.tar.bz2 && tar xf opensbi-${OPENSBI_VERSION}.tar.gz
 
-# --- BusyBox, static.
+# --- Soft-float userland toolchain. Debian's riscv64-linux-gnu targets
+# rv64gc/lp64d (hard float); a BusyBox built with it dies with SIGILL on our
+# rv64imac target. musl-cross-make builds a pinned rv64imac/lp64 musl
+# toolchain instead.
+ARG MCM_COMMIT=227df8b99103f9c59f6570babf892978e293082f
+RUN git clone https://github.com/richfelker/musl-cross-make.git && \
+    cd musl-cross-make && git checkout ${MCM_COMMIT} && \
+    { echo 'TARGET = riscv64-linux-musl'; \
+      echo 'GCC_CONFIG += --with-arch=rv64imac_zicsr_zifencei --with-abi=lp64'; \
+      echo 'OUTPUT = /opt/cross'; } > config.mak && \
+    make -j$(nproc) install && cd .. && rm -rf musl-cross-make
+ENV PATH="/opt/cross/bin:${PATH}"
+
+# --- BusyBox, static, soft-float.
 RUN cd busybox-${BUSYBOX_VERSION} && \
-    make CROSS_COMPILE=riscv64-linux-gnu- defconfig && \
+    make CROSS_COMPILE=riscv64-linux-musl- defconfig && \
     sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config && \
-    make CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc) busybox && \
-    file busybox | grep -q 'statically linked'
+    make CROSS_COMPILE=riscv64-linux-musl- -j$(nproc) busybox && \
+    file busybox | grep -q 'statically linked' && \
+    ! riscv64-linux-musl-objdump -d busybox | grep -qE '^\s+\w+:\s+\w+\s+f(l|s)[wd]\s' \
+        || { echo 'FP instructions found in busybox'; exit 1; }
 
 # --- Initramfs tree.
 COPY initramfs-init /build/initramfs/init

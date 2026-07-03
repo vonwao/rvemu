@@ -180,12 +180,8 @@ pub fn sstatus_view(mstatus: u64) -> u64 {
 }
 
 pub fn legalize_mtvec(val: u64) -> u64 {
-    // MODE >= 2 reserved: WARL, keep direct/vectored only (Spike masks to 1).
-    if val & 3 >= 2 {
-        val & !3
-    } else {
-        val
-    }
+    // Spike's tvec_csr_t::unlogged_write: clear bit 1, keep bit 0.
+    val & !2
 }
 
 /// Effective privilege-independent write masks etc. are applied in
