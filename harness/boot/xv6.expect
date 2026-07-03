@@ -1,0 +1,76 @@
+# Boot conformance for the xv6 target (charter layer 4). Drives the emulator
+# to the shell, runs a fixed command sequence, and requires exact output per
+# the pinned build (inode numbers and sizes are fixed by the pinned fs.img).
+# Usage (via run-boot.sh): expect -f xv6.expect <rvemu-path> <repo-root>
+set rvemu [lindex $argv 0]
+set root [lindex $argv 1]
+set timeout 600
+log_user 1
+
+spawn $rvemu --max-insns 20000000000 $root/targets/vendor/xv6-build/kernel/kernel
+
+expect {
+    -exact "xv6 kernel is booting" {}
+    timeout { puts "\nBOOT-FAIL: no banner"; exit 1 }
+    eof { puts "\nBOOT-FAIL: emulator exited before banner"; exit 1 }
+}
+expect {
+    -exact "init: starting sh" {}
+    timeout { puts "\nBOOT-FAIL: init did not start sh"; exit 1 }
+    eof { puts "\nBOOT-FAIL: emulator exited before init"; exit 1 }
+}
+expect {
+    -exact "$ " {}
+    timeout { puts "\nBOOT-FAIL: no shell prompt"; exit 1 }
+    eof { puts "\nBOOT-FAIL: emulator exited before prompt"; exit 1 }
+}
+
+send "ls\n"
+# Exact listing for the pinned fs.img, in order.
+foreach line {
+    {README         2 2 2441}
+    {cat            2 3 38200}
+    {echo           2 4 36984}
+    {forktest       2 5 18272}
+    {grep           2 6 41760}
+    {init           2 7 37368}
+    {kill           2 8 36912}
+    {ln             2 9 36704}
+    {ls             2 10 40368}
+    {mkdir          2 11 36968}
+    {rm             2 12 36960}
+    {sh             2 13 60912}
+    {stressfs       2 14 37824}
+    {usertests      2 15 195352}
+    {grind          2 16 53456}
+    {wc             2 17 39232}
+    {zombie         2 18 36232}
+    {logstress      2 19 38984}
+    {forphan        2 20 37752}
+    {dorphan        2 21 37184}
+    {sync           2 22 36344}
+    {console        3 23 0}
+} {
+    expect {
+        -exact $line {}
+        timeout { puts "\nBOOT-FAIL: missing ls line: $line"; exit 1 }
+        eof { puts "\nBOOT-FAIL: eof during ls"; exit 1 }
+    }
+}
+expect {
+    -exact "$ " {}
+    timeout { puts "\nBOOT-FAIL: no prompt after ls"; exit 1 }
+}
+
+send "echo boothello\n"
+expect {
+    -exact "boothello" {}
+    timeout { puts "\nBOOT-FAIL: echo output missing"; exit 1 }
+}
+expect {
+    -exact "$ " {}
+    timeout { puts "\nBOOT-FAIL: no prompt after echo"; exit 1 }
+}
+
+puts "\nBOOT-OK: xv6 scripted sequence matched"
+exit 0
