@@ -15,3 +15,11 @@ Dated, ordered, descriptive. Pass/fail claims are only restated here after the h
 - **~13:5x–14:3x** xv6 boots to shell on Spike and executes `ls` (golden transcript `harness/boot/xv6.transcript`); Linux boots to interactive BusyBox shell on Spike, `uname -a`/`echo` verified (`harness/boot/linux.transcript`).
 - **~14:30** **Freeze**: `harness/` chmod'd read-only, target recipes locked, first REPORTS.md entry committed (`cfbfda8`). No blocked items.
 - **~14:4x** Process instrumentation added (this directory) and backfilled from the day's evidence.
+
+## 2026-07-03 (day 0, evening) — Gate B
+
+- **~14:45** Process instrumentation created and backfilled; repo pushed to github.com/vonwao/rvemu; formal Gate A report committed (`4df2a9a`).
+- **~15:0x** Gate B implementation: Sv39 translation (Svade, MPRV/SUM/MXR), PLIC and ns16550 modeled register-for-register on the vendored Spike sources (including the first-enabled-context PLIC quirk and the level-triggered THRE behavior), console plumbing through the Platform trait.
+- **~15:2x** riscv-tests: rv64si 7/7 (dirty and icache-alias pass with Svade); -v variants driven green through four lockstep/RISCOF-diagnosed fixes (mstatus.FS writable, tohost physical-address match, plus Gate A trace conventions). Full suite: **106/108** — the two ma_data variants only (see failures.md). Certified by `harness/run-riscv-tests.sh` after the trap-quantum commit (`d0f07e7` tree).
+- **~15:3x** **xv6 boots to its shell on rvemu on the first console-wired attempt**; the frozen boot layer certifies it: `harness/boot/run-boot.sh xv6` → **BOOT-OK**, full scripted sequence (banner, init, prompt, exact 23-line `ls`, `echo boothello`). RISCOF regression after the Gate B MMU/device work: **136/136**.
+- **~15:4x–16:5x** Lockstep vs Spike on the xv6 boot: three architectural divergences found and fixed (medeleg WARL mask, sie/sip dual-token logging, the RTC quantum model — see divergences.md). Final run: **prefix-clean over 423,107,530 instructions**, zero divergences to the reference's budget end (`boh8yg4ww` run, tree `d0f07e7`+quantum-trap fix).
