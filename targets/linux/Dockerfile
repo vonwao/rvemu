@@ -4,19 +4,21 @@
 FROM debian:bookworm-20250630
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc-riscv64-linux-gnu flex bison bc libssl-dev \
+    build-essential gcc-riscv64-linux-gnu libc6-dev-riscv64-cross flex bison bc libssl-dev \
     libelf-dev cpio xz-utils wget ca-certificates device-tree-compiler \
     python3 file && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-ARG KERNEL_VERSION=6.12.10
+# kernel.org's CDN is unreachable from the build network; the kernel comes
+# from the official GitHub mirror instead, pinned to the mainline v6.12 tag.
+ARG KERNEL_VERSION=6.12
 ARG BUSYBOX_VERSION=1.36.1
 ARG OPENSBI_VERSION=1.6
 
-RUN wget -q https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KERNEL_VERSION}.tar.xz && \
+RUN wget -q https://github.com/torvalds/linux/archive/refs/tags/v${KERNEL_VERSION}.tar.gz -O linux-${KERNEL_VERSION}.tar.gz && \
     wget -q https://busybox.net/downloads/busybox-${BUSYBOX_VERSION}.tar.bz2 && \
     wget -q https://github.com/riscv-software-src/opensbi/archive/refs/tags/v${OPENSBI_VERSION}.tar.gz -O opensbi-${OPENSBI_VERSION}.tar.gz && \
-    tar xf linux-${KERNEL_VERSION}.tar.xz && tar xf busybox-${BUSYBOX_VERSION}.tar.bz2 && tar xf opensbi-${OPENSBI_VERSION}.tar.gz
+    tar xf linux-${KERNEL_VERSION}.tar.gz && tar xf busybox-${BUSYBOX_VERSION}.tar.bz2 && tar xf opensbi-${OPENSBI_VERSION}.tar.gz
 
 # --- BusyBox, static.
 RUN cd busybox-${BUSYBOX_VERSION} && \

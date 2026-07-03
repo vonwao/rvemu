@@ -23,7 +23,18 @@ All external suites, the reference simulator, and OS targets are pinned to the e
 
 ## OS targets
 
-(filled in at §8 step 5 — xv6-riscv commit and Linux/BusyBox versions + build recipes)
+| Component | Source | Pin |
+|---|---|---|
+| xv6-riscv | https://github.com/mit-pdos/xv6-riscv | `1982fd12595f52a0e5ef8db466257a01fb1fbfef` |
+| Linux kernel | https://github.com/torvalds/linux (official mirror; kernel.org CDN unreachable from this network) | tag `v6.12` |
+| BusyBox | https://busybox.net/downloads | `1.36.1`, static |
+| OpenSBI | https://github.com/riscv-software-src/opensbi | tag `v1.6` |
+
+xv6 build: `targets/build-xv6.sh` (recipe in-script: memdisk driver replacing virtio, embedded fs.img, UART0_IRQ 10→1 to match Spike's PLIC wiring, `-march=rv64imac_zicsr_zifencei -mabi=lp64`). Output: `targets/vendor/xv6-build/kernel/kernel`.
+
+Linux build: `targets/build-linux.sh` → Docker per `targets/linux/Dockerfile` (pinned base image digest, pinned component versions; kernel config = riscv defconfig + `targets/linux/kernel-config.sh` overrides: no SMP/FPU/V/modules/net/block/virtio, embedded BusyBox initramfs; DTB from `targets/linux/platform.dts`, bootargs force Sv39 via `no4lvl no5lvl`). Output: `targets/vendor/linux-build/fw_payload.elf` (OpenSBI generic + kernel + DTB + initramfs, entry 0x80000000).
+
+OS runs (both Spike reference and rvemu) use ISA `rv64imac_zicsr_zifencei_zicntr_sstc`: this xv6 revision and Linux read the `time` CSR (Zicntr) and program `stimecmp` (Sstc).
 
 ## Build recipes
 
