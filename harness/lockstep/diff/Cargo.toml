@@ -1,0 +1,13 @@
+[package]
+name = "lockstep-diff"
+version = "1.0.0"
+edition = "2021"
+
+# Frozen harness component. Standalone crate, deliberately outside the main
+# workspace so emulator work never touches it.
+[workspace]
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
