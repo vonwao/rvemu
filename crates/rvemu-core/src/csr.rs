@@ -59,6 +59,8 @@ pub const MSTATUS_TVM: u64 = 1 << 20;
 pub const MSTATUS_TW: u64 = 1 << 21;
 pub const MSTATUS_TSR: u64 = 1 << 22;
 pub const MSTATUS_UXL_SXL: u64 = (2 << 32) | (2 << 34); // read-only 64-bit
+pub const MSTATUS_FS: u64 = 3 << 13; // writable on the pinned Spike even w/o F
+pub const MSTATUS_SD: u64 = 1 << 63; // read-only: FS == dirty
 
 // mip/mie bits
 pub const IRQ_SSIP: u64 = 1 << 1;
@@ -81,9 +83,16 @@ const MSTATUS_WMASK: u64 = MSTATUS_SIE
     | MSTATUS_MXR
     | MSTATUS_TVM
     | MSTATUS_TW
-    | MSTATUS_TSR;
-const SSTATUS_MASK: u64 =
-    MSTATUS_SIE | MSTATUS_SPIE | MSTATUS_SPP | MSTATUS_SUM | MSTATUS_MXR | (2 << 32) /*UXL ro*/;
+    | MSTATUS_TSR
+    | MSTATUS_FS;
+const SSTATUS_MASK: u64 = MSTATUS_SIE
+    | MSTATUS_SPIE
+    | MSTATUS_SPP
+    | MSTATUS_SUM
+    | MSTATUS_MXR
+    | MSTATUS_FS
+    | MSTATUS_SD
+    | (2 << 32) /*UXL ro*/;
 const MEDELEG_WMASK: u64 = 0xb3ff; // delegatable exceptions (no M-ecall bit 11)
 const MIDELEG_WMASK: u64 = IRQ_SSIP | IRQ_STIP | IRQ_SEIP;
 const MIE_WMASK: u64 = IRQ_SSIP | IRQ_MSIP | IRQ_STIP | IRQ_MTIP | IRQ_SEIP | IRQ_MEIP;
@@ -172,7 +181,14 @@ pub fn legalize_mstatus(old: u64, val: u64) -> u64 {
     if mpp == 2 {
         new = (new & !MSTATUS_MPP_MASK) | (old & MSTATUS_MPP_MASK);
     }
-    new | MSTATUS_UXL_SXL
+    new |= MSTATUS_UXL_SXL;
+    // SD is read-only, set when FS is Dirty (no XS/VS on this target).
+    if new & MSTATUS_FS == MSTATUS_FS {
+        new |= MSTATUS_SD;
+    } else {
+        new &= !MSTATUS_SD;
+    }
+    new
 }
 
 pub fn sstatus_view(mstatus: u64) -> u64 {

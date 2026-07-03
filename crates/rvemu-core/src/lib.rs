@@ -8,6 +8,8 @@ pub mod csr;
 pub mod elf;
 pub mod machine;
 pub mod platform;
+pub mod plic;
+pub mod uart;
 pub mod trap;
 
 pub use platform::Platform;

@@ -127,6 +127,12 @@ impl Cpu {
         if self.stce() && self.mtime() >= self.csrs.stimecmp {
             v |= csr::IRQ_STIP;
         }
+        if self.bus.plic.meip {
+            v |= csr::IRQ_MEIP;
+        }
+        if self.bus.plic.seip {
+            v |= csr::IRQ_SEIP;
+        }
         v
     }
 
@@ -553,7 +559,92 @@ impl Cpu {
         false
     }
 
-    // ---- memory (Gate A: physical only) --------------------------------
+    // ---- memory: Sv39 translation matching the pinned Spike ------------
+
+    /// Translate a virtual address. Access kinds: 0=load, 1=store, 2=fetch.
+    /// Matches the pinned Spike: Svade (page fault on A=0, or D=0 store),
+    /// MPRV/SUM/MXR honored, PTW memory errors surface as access faults of
+    /// the original access type.
+    fn translate(&mut self, va: u64, acc: u8) -> Result<u64, Exception> {
+        let eff_prv = if acc != 2 && self.csrs.mstatus & csr::MSTATUS_MPRV != 0 && self.prv == PRV_M {
+            ((self.csrs.mstatus >> 11) & 3) as u8
+        } else {
+            self.prv
+        };
+        if eff_prv == PRV_M || self.csrs.satp >> 60 != 8 {
+            return Ok(va);
+        }
+        let page_fault = |va: u64| match acc {
+            0 => Exception::LoadPageFault(va),
+            1 => Exception::StorePageFault(va),
+            _ => Exception::InstructionPageFault(va),
+        };
+        let access_fault = |va: u64| match acc {
+            0 => Exception::LoadAccessFault(va),
+            1 => Exception::StoreAccessFault(va),
+            _ => Exception::InstructionAccessFault(va),
+        };
+        // Sv39 canonical check: bits 63..39 must all equal bit 38.
+        if (((va as i64) << 25) >> 25) as u64 != va {
+            return Err(page_fault(va));
+        }
+        let sum = self.csrs.mstatus & csr::MSTATUS_SUM != 0;
+        let mxr = self.csrs.mstatus & csr::MSTATUS_MXR != 0;
+        let mut a = (self.csrs.satp & 0xfff_ffff_ffff) << 12;
+        let mut i: i32 = 2;
+        loop {
+            let vpn = (va >> (12 + 9 * i)) & 0x1ff;
+            let pte = self
+                .bus
+                .load(a + vpn as u64 * 8, 8)
+                .map_err(|_| access_fault(va))?;
+            const V: u64 = 1;
+            const R: u64 = 2;
+            const W: u64 = 4;
+            const X: u64 = 8;
+            const U: u64 = 16;
+            const A_BIT: u64 = 64;
+            const D_BIT: u64 = 128;
+            if pte & V == 0 || (pte & R == 0 && pte & W != 0) {
+                return Err(page_fault(va));
+            }
+            if pte & (R | X) != 0 {
+                // Leaf.
+                let ok = match acc {
+                    0 => pte & R != 0 || (mxr && pte & X != 0),
+                    1 => pte & W != 0,
+                    _ => pte & X != 0,
+                };
+                if !ok {
+                    return Err(page_fault(va));
+                }
+                if pte & U != 0 {
+                    if eff_prv == PRV_S && (acc == 2 || !sum) {
+                        return Err(page_fault(va));
+                    }
+                } else if eff_prv == PRV_U {
+                    return Err(page_fault(va));
+                }
+                // Superpage alignment.
+                let ppn = pte >> 10 & 0xfff_ffff_fff;
+                if i > 0 && ppn & ((1 << (9 * i)) - 1) != 0 {
+                    return Err(page_fault(va));
+                }
+                // Svade: no hardware A/D updates on the pinned Spike.
+                if pte & A_BIT == 0 || (acc == 1 && pte & D_BIT == 0) {
+                    return Err(page_fault(va));
+                }
+                let vpn_low_mask = (1u64 << (9 * i)) - 1;
+                let pa_ppn = (ppn & !vpn_low_mask) | ((va >> 12) & vpn_low_mask);
+                return Ok((pa_ppn << 12) | (va & 0xfff));
+            }
+            i -= 1;
+            if i < 0 {
+                return Err(page_fault(va));
+            }
+            a = (pte >> 10 & 0xfff_ffff_fff) << 12;
+        }
+    }
 
     // The pinned Spike (default build, no --misaligned) raises misaligned
     // exceptions on unaligned data accesses; the RISCOF privilege misalign
@@ -567,7 +658,8 @@ impl Cpu {
         if vaddr % size != 0 {
             return Err(Exception::LoadAddressMisaligned(vaddr));
         }
-        self.bus.load(vaddr, size)
+        let pa = self.translate(vaddr, 0)?;
+        self.bus.load(pa, size)
     }
 
     fn store(&mut self, vaddr: u64, val: u64, size: u64) -> Result<(), Exception> {
@@ -577,9 +669,12 @@ impl Cpu {
         if vaddr % size != 0 {
             return Err(Exception::StoreAddressMisaligned(vaddr));
         }
-        self.bus.store(vaddr, val, size)?;
+        let pa = self.translate(vaddr, 1)?;
+        self.bus.store(pa, val, size)?;
         self.trace_store(vaddr, val, size);
-        if self.tohost == Some(vaddr) && val != 0 {
+        // HTIF: tohost is matched on the physical address (the -v tests
+        // store through a virtual mapping).
+        if self.tohost == Some(pa) && val != 0 {
             self.tohost_value = Some(val);
         }
         Ok(())
@@ -587,18 +682,20 @@ impl Cpu {
 
     // ---- fetch/step -----------------------------------------------------
 
+    fn fetch_parcel(&mut self, va: u64) -> Result<u16, Exception> {
+        let pa = self.translate(va, 2)?;
+        self.bus
+            .load(pa, 2)
+            .map_err(|_| Exception::InstructionAccessFault(va))
+            .map(|v| v as u16)
+    }
+
     fn fetch(&mut self) -> Result<(u32, u32), Exception> {
         // Returns (raw bits as fetched, expanded 32-bit instruction).
         let pc = self.pc;
-        let lo = self
-            .bus
-            .load(pc, 2)
-            .map_err(|_| Exception::InstructionAccessFault(pc))? as u32;
+        let lo = self.fetch_parcel(pc)? as u32;
         if lo & 3 == 3 {
-            let hi = self
-                .bus
-                .load(pc + 2, 2)
-                .map_err(|_| Exception::InstructionAccessFault(pc))? as u32;
+            let hi = self.fetch_parcel(pc + 2)? as u32;
             let insn = lo | (hi << 16);
             Ok((insn, insn))
         } else {
@@ -662,12 +759,14 @@ impl Cpu {
         self.cycle_written = false;
         if self.retired % INSNS_PER_RTC_TICK == 0 {
             self.bus.clint.mtime = self.bus.clint.mtime.wrapping_add(1);
+            self.bus.tick_devices();
         }
     }
 
     /// Advance time while idle in WFI (no instructions retiring).
     pub fn idle_tick(&mut self) {
         self.bus.clint.mtime = self.bus.clint.mtime.wrapping_add(1);
+        self.bus.tick_devices();
     }
 
     pub fn has_pending_interrupt(&self) -> bool {
@@ -925,7 +1024,8 @@ impl Cpu {
                 if rs2 != 0 {
                     return Err(ExecOutcome::Exception(Exception::IllegalInstruction(insn as u64)));
                 }
-                let v = self.bus.load(addr, size).map_err(ExecOutcome::Exception)?;
+                let pa = self.translate(addr, 0).map_err(ExecOutcome::Exception)?;
+                let v = self.bus.load(pa, size).map_err(ExecOutcome::Exception)?;
                 let v = if size == 4 { v as i32 as i64 as u64 } else { v };
                 self.reservation = Some(addr);
                 self.set_x(rd, v);
@@ -935,8 +1035,9 @@ impl Cpu {
             0x03 => {
                 // sc
                 if self.reservation == Some(addr) {
+                    let pa = self.translate(addr, 1).map_err(ExecOutcome::Exception)?;
                     self.bus
-                        .store(addr, self.x(rs2), size)
+                        .store(pa, self.x(rs2), size)
                         .map_err(ExecOutcome::Exception)?;
                     self.set_x(rd, 0);
                     self.trace_store(addr, self.x(rs2), size);
@@ -947,7 +1048,10 @@ impl Cpu {
                 Ok(next)
             }
             _ => {
-                let old = self.bus.load(addr, size).map_err(ExecOutcome::Exception)?;
+                // AMO: translated once as a store-type access (all AMO page
+                // faults are store faults).
+                let pa = self.translate(addr, 1).map_err(ExecOutcome::Exception)?;
+                let old = self.bus.load(pa, size).map_err(ExecOutcome::Exception)?;
                 let old_sx = if size == 4 { old as i32 as i64 as u64 } else { old };
                 let b = self.x(rs2);
                 let newv = match f5 {
@@ -987,7 +1091,7 @@ impl Cpu {
                     _ => return Err(ExecOutcome::Exception(Exception::IllegalInstruction(insn as u64))),
                 };
                 self.bus
-                    .store(addr, newv, size)
+                    .store(pa, newv, size)
                     .map_err(ExecOutcome::Exception)?;
                 self.set_x(rd, old_sx);
                 // Spike logs AMO memory as load addr then store addr=val.
@@ -1106,9 +1210,15 @@ impl Cpu {
                 .csr_write(csr_addr, newv, insn as u64)
                 .map_err(ExecOutcome::Exception)?;
             self.set_x(rd, old);
-            let name = Self::csr_name(csr_addr);
-            // Counter CSRs are excluded from comparison anyway; still emit.
-            self.trace_csr(name, stored);
+            // Spike's commit log names the backing register with its full
+            // value for the S-mode aliases.
+            let (name, val) = match csr_addr {
+                csr::SSTATUS => ("mstatus", self.csrs.mstatus),
+                csr::SIE => ("mie", self.csrs.mie),
+                csr::SIP => ("mip", self.mip()),
+                _ => (Self::csr_name(csr_addr), stored),
+            };
+            self.trace_csr(name, val);
         } else {
             self.set_x(rd, old);
         }

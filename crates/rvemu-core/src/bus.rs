@@ -1,11 +1,18 @@
 //! Physical memory bus: RAM, Spike-compatible boot ROM, and devices
 //! (Gate A: CLINT only; PLIC and UART arrive with Gate B).
 
+use crate::plic::Plic;
 use crate::trap::Exception;
+use crate::uart::Uart;
 
 pub const BOOT_ROM_BASE: u64 = 0x1000;
 pub const CLINT_BASE: u64 = 0x0200_0000;
 pub const CLINT_SIZE: u64 = 0xc0000;
+pub const PLIC_BASE: u64 = 0x0c00_0000;
+pub const PLIC_SIZE: u64 = 0x100_0000;
+pub const UART_BASE: u64 = 0x1000_0000;
+pub const UART_SIZE: u64 = 0x100;
+pub const UART_IRQ: u32 = 1;
 pub const RAM_BASE: u64 = 0x8000_0000;
 
 pub const CLINT_MSIP: u64 = 0x0;
@@ -61,6 +68,11 @@ pub struct Bus {
     pub ram: Vec<u8>,
     boot_rom: Vec<u8>,
     pub clint: Clint,
+    pub plic: Plic,
+    pub uart: Uart,
+    /// Host console input staged by the platform layer; the UART pulls from
+    /// it one byte per RTC tick (with Spike's backoff).
+    pub input_queue: std::collections::VecDeque<u8>,
 }
 
 impl Bus {
@@ -69,7 +81,22 @@ impl Bus {
             ram: vec![0; ram_bytes],
             boot_rom: Vec::new(),
             clint: Clint::new(),
+            plic: Plic::new(),
+            uart: Uart::new(),
+            input_queue: std::collections::VecDeque::new(),
         }
+    }
+
+    fn sync_uart_irq(&mut self) {
+        let lvl = self.uart.irq_level;
+        self.plic.set_interrupt_level(UART_IRQ, lvl);
+    }
+
+    /// Per-RTC-tick device work (mirrors Spike's device tick cadence).
+    pub fn tick_devices(&mut self) {
+        let q = &mut self.input_queue;
+        self.uart.tick(|| q.pop_front());
+        self.sync_uart_irq();
     }
 
     /// Install the reset ROM image at 0x1000 (Spike-compatible: 5
@@ -103,6 +130,12 @@ impl Bus {
             return Ok(v);
         } else if (CLINT_BASE..CLINT_BASE + CLINT_SIZE).contains(&paddr) {
             return self.clint.read(paddr - CLINT_BASE, size).map_err(|_| Exception::LoadAccessFault(paddr));
+        } else if (PLIC_BASE..PLIC_BASE + PLIC_SIZE).contains(&paddr) {
+            return self.plic.load(paddr - PLIC_BASE, size).map_err(|_| Exception::LoadAccessFault(paddr));
+        } else if (UART_BASE..UART_BASE + UART_SIZE).contains(&paddr) {
+            let v = self.uart.load(paddr - UART_BASE, size).map_err(|_| Exception::LoadAccessFault(paddr))?;
+            self.sync_uart_irq();
+            return Ok(v);
         }
         Err(Exception::LoadAccessFault(paddr))
     }
@@ -118,6 +151,12 @@ impl Bus {
             }
         } else if (CLINT_BASE..CLINT_BASE + CLINT_SIZE).contains(&paddr) {
             return self.clint.write(paddr - CLINT_BASE, val, size).map_err(|_| Exception::StoreAccessFault(paddr));
+        } else if (PLIC_BASE..PLIC_BASE + PLIC_SIZE).contains(&paddr) {
+            return self.plic.store(paddr - PLIC_BASE, val, size).map_err(|_| Exception::StoreAccessFault(paddr));
+        } else if (UART_BASE..UART_BASE + UART_SIZE).contains(&paddr) {
+            self.uart.store(paddr - UART_BASE, val, size).map_err(|_| Exception::StoreAccessFault(paddr))?;
+            self.sync_uart_irq();
+            return Ok(());
         }
         Err(Exception::StoreAccessFault(paddr))
     }

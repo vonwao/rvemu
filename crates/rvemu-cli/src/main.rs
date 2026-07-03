@@ -2,6 +2,7 @@
 //! Exit codes: 0 = tohost PASS, 1 = tohost FAIL, 2 = budget exhausted /
 //! usage error / load error.
 
+use rvemu_core::platform::StdioPlatform;
 use rvemu_core::{elf, machine};
 use std::io::Write;
 
@@ -54,7 +55,8 @@ fn main() {
     });
     m.cpu.trace_enabled = trace_file.is_some();
 
-    let exit = m.run(max_insns, |line| {
+    let mut platform = StdioPlatform::new();
+    let exit = m.run(max_insns, &mut platform, |line| {
         if let Some(f) = trace_file.as_mut() {
             let _ = writeln!(f, "{}", line);
         }

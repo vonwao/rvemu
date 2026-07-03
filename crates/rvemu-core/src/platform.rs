@@ -15,22 +15,30 @@ pub trait Platform {
     fn console_read(&mut self) -> Option<u8>;
 }
 
-/// Native stdin/stdout implementation used by the CLI.
+/// Native stdin/stdout implementation used by the CLI. Stdin is drained by
+/// a background thread so `console_read` never blocks (works for pipes and
+/// ptys alike).
 pub struct StdioPlatform {
-    input: std::collections::VecDeque<u8>,
+    rx: std::sync::mpsc::Receiver<u8>,
 }
 
 impl StdioPlatform {
     pub fn new() -> Self {
-        Self {
-            input: std::collections::VecDeque::new(),
-        }
-    }
-
-    /// Queue bytes to be delivered as console input (used for scripted
-    /// boot-conformance runs).
-    pub fn push_input(&mut self, bytes: &[u8]) {
-        self.input.extend(bytes);
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut stdin = std::io::stdin().lock();
+            let mut buf = [0u8; 1];
+            while let Ok(n) = stdin.read(&mut buf) {
+                if n == 0 {
+                    break; // EOF: stop feeding input
+                }
+                if tx.send(buf[0]).is_err() {
+                    break;
+                }
+            }
+        });
+        Self { rx }
     }
 }
 
@@ -49,6 +57,6 @@ impl Platform for StdioPlatform {
     }
 
     fn console_read(&mut self) -> Option<u8> {
-        self.input.pop_front()
+        self.rx.try_recv().ok()
     }
 }

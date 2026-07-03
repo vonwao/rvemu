@@ -4,6 +4,7 @@
 use crate::bus::{Bus, RAM_BASE};
 use crate::cpu::{Cpu, StepResult};
 use crate::elf::LoadedElf;
+use crate::platform::Platform;
 
 /// Spike-compatible reset ROM at 0x1000: sets a0=mhartid, a1=&dtb (0x1020),
 /// loads the entry address from 0x1018 and jumps to it.
@@ -59,19 +60,29 @@ impl Machine {
     /// Run until tohost is written or `max_insns` instructions retire.
     /// Calls `on_trace` with the canonical line after each retirement when
     /// tracing is enabled.
-    pub fn run(&mut self, max_insns: u64, mut on_trace: impl FnMut(&str)) -> RunExit {
+    pub fn run(
+        &mut self,
+        max_insns: u64,
+        platform: &mut dyn Platform,
+        mut on_trace: impl FnMut(&str),
+    ) -> RunExit {
         // The budget bounds steps (attempted instructions), not retirements:
         // a trap loop retires nothing but must still terminate, matching
         // Spike's --instructions semantics.
         let mut steps: u64 = 0;
         while steps < max_insns {
             steps += 1;
+            // Console plumbing every RTC-tick-ish interval: cheap check.
+            if steps % 128 == 0 {
+                self.pump_console(platform);
+            }
             match self.cpu.step() {
                 StepResult::Retired => {
                     if self.cpu.trace_enabled {
                         on_trace(&self.cpu.trace_line);
                     }
                     if let Some(v) = self.cpu.tohost_value.take() {
+                        self.pump_console(platform);
                         return RunExit::Tohost(v);
                     }
                 }
@@ -87,14 +98,31 @@ impl Machine {
                     while !self.cpu.has_pending_interrupt() {
                         self.cpu.idle_tick();
                         guard += 1;
+                        if guard % 4096 == 0 {
+                            self.pump_console(platform);
+                        }
                         if guard > 1_000_000_000 {
+                            self.pump_console(platform);
                             return RunExit::Budget;
                         }
                     }
                 }
             }
         }
+        self.pump_console(platform);
         RunExit::Budget
+    }
+
+    fn pump_console(&mut self, platform: &mut dyn Platform) {
+        for b in self.cpu.bus.uart.tx_out.drain(..) {
+            platform.console_write(b);
+        }
+        while self.cpu.bus.input_queue.len() < 64 {
+            match platform.console_read() {
+                Some(b) => self.cpu.bus.input_queue.push_back(b),
+                None => break,
+            }
+        }
     }
 
     /// Read the signature region (RISCOF contract).
