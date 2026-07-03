@@ -30,3 +30,7 @@ Diagnosis method throughout: marker printks in a scratch copy of the target (nev
 - kernel.org's CDN 403/404s from this network (even the URL its own releases.json advertises); the kernel pin moved to the GitHub mirror tag `v6.12`.
 - Spike's `--log-commits` through a FIFO into a 56GB tail pipeline was abandoned as a diagnosis tool (too slow under CPU contention); debug-mode `rs`+CSR dumps and marker builds were faster.
 - Multiple background-job pipelines ate their own output (`grep | head` buffering, concatenated views); switched to plain files.
+
+## 2026-07-03 (Gate B) — Two hours inside Spike's timekeeping
+
+The 21-tick `time` skew at lockstep instruction 410,787,976 produced two wrong models before the right one: (1) mtime = retired/100 — refuted by the same read being 50 low; (2) a constant startup offset — refuted by xv6's *first* time read (instruction ~40) having matched at mtime 0. The correct model (quantum slices; traps consume the remainder) came from reading sim.cc's step loop and execute.cc's catch(trap_t) `n = instret` early-exit, not from guessing. Recorded because the temptation at each wrong model was to "just nudge the tick rate until the number matches" — which would have fit one read and diverged on the next. Nothing in the harness or its counter-CSR exclusion list was touched; `time` reads remain fully compared.
