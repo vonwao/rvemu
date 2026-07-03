@@ -11,7 +11,8 @@ Everything here reports machine-derived facts: pass counts, first-divergence coo
 - `--trace <file>` — write one line per retired instruction in the normalized trace format below (`-` for stdout is not used; always a file or FIFO path).
 - `--signature <file> --signature-granularity 4` — RISCOF signature dump: on test exit, write the memory between symbols `begin_signature`/`end_signature` as little-endian 4-byte hex words, one per line.
 - Machine reset state: `pc` = ELF entry, `x0..x31` = 0, `mstatus` per spec reset, hart 0, `mhartid`=0.
-- Memory map (fixed, qemu-virt-compatible): CLINT `0x0200_0000`, PLIC `0x0c00_0000`, UART0 (16550) `0x1000_0000`, RAM `0x8000_0000` (default 256 MiB, `--ram-mib <n>` to change).
+- Memory map (fixed, matching the pinned Spike's platform): CLINT `0x0200_0000`, PLIC `0x0c00_0000` (31 sources), UART0 (16550, byte registers, reg-shift 0) at `0x1000_0000` on **PLIC source 1** (Spike's wiring; qemu-virt uses 10 — the xv6 target is patched accordingly), RAM `0x8000_0000` (default 256 MiB, `--ram-mib <n>` to change).
+- Full ISA surface for OS targets: `rv64imac_zicsr_zifencei_zicntr_sstc` (xv6 and Linux read the `time` CSR and program `stimecmp`). Lockstep runs pass the same string to Spike via `LOCKSTEP_ISA`.
 - CLINT `mtime` advances by 1 per 100 retired instructions (Spike's default `CPU_HZ/INSNS_PER_RTC_TICK` behavior), so timer interrupts land deterministically and identically to the pinned Spike.
 - Console I/O goes through the UART; `--console-file <file>` mirrors UART output to a file for the boot layer.
 

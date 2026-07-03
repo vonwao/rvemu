@@ -1,0 +1,6 @@
+#!/bin/busybox sh
+/bin/busybox --install -s /bin
+mount -t proc none /proc
+mount -t sysfs none /sys
+echo "initramfs: init complete"
+exec setsid sh -c 'exec sh </dev/ttyS0 >/dev/ttyS0 2>&1'

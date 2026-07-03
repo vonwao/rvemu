@@ -1,0 +1,76 @@
+/dts-v1/;
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	compatible = "ucbbar,spike-bare-dev";
+	model = "ucbbar,spike-bare";
+
+	chosen {
+		stdout-path = "/soc/uart@10000000";
+		bootargs = "console=ttyS0 earlycon=uart8250,mmio,0x10000000 no4lvl no5lvl";
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		timebase-frequency = <10000000>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			reg = <0>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imac_zicsr_zifencei_zicntr_sstc";
+			riscv,isa-base = "rv64i";
+			riscv,isa-extensions = "i", "m", "a", "c", "zicsr", "zifencei", "zicntr", "sstc";
+			mmu-type = "riscv,sv39";
+			clock-frequency = <1000000000>;
+
+			cpu0_intc: interrupt-controller {
+				#address-cells = <2>;
+				#interrupt-cells = <1>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+			};
+		};
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x10000000>;
+	};
+
+	soc {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "ucbbar,spike-bare-soc", "simple-bus";
+		ranges;
+
+		clint@2000000 {
+			compatible = "sifive,clint0", "riscv,clint0";
+			interrupts-extended = <&cpu0_intc 3 &cpu0_intc 7>;
+			reg = <0x0 0x2000000 0x0 0xc0000>;
+		};
+
+		plic: plic@c000000 {
+			compatible = "sifive,plic-1.0.0", "riscv,plic0";
+			#address-cells = <2>;
+			interrupts-extended = <&cpu0_intc 11 &cpu0_intc 9>;
+			reg = <0x0 0xc000000 0x0 0x1000000>;
+			riscv,ndev = <31>;
+			#interrupt-cells = <1>;
+			interrupt-controller;
+		};
+
+		uart@10000000 {
+			compatible = "ns16550a";
+			clock-frequency = <10000000>;
+			interrupt-parent = <&plic>;
+			interrupts = <1>;
+			reg = <0x0 0x10000000 0x0 0x100>;
+			reg-shift = <0>;
+			reg-io-width = <1>;
+		};
+	};
+};

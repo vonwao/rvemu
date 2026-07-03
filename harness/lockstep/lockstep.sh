@@ -7,7 +7,9 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SPIKE="$ROOT/targets/vendor/spike/install/bin/spike"
 RVEMU="${RVEMU:-$ROOT/target/release/rvemu}"
 DIFF="$ROOT/harness/lockstep/diff/target/release/lockstep-diff"
-ISA=rv64imac_zicsr_zifencei
+# Run parameter, like the ELF path: riscv-tests use the base ISA; OS targets
+# need _zicntr_sstc (xv6/Linux read the time CSR and use stimecmp).
+ISA="${LOCKSTEP_ISA:-rv64imac_zicsr_zifencei}"
 
 ELF="${1:?usage: lockstep.sh <elf> [max-insns]}"
 MAX="${2:-100000000}"
