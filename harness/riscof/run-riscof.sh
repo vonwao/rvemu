@@ -13,14 +13,14 @@ export PATH="$ROOT/targets/vendor/xpack-riscv-none-elf-gcc-15.2.0-1/bin:$PATH"
 mkdir -p "$WORK"
 cd "$HERE"
 "$VENV/bin/riscof" run --config=config.ini --suite="$SUITE" --env="$SUITE/env" \
-  --work-dir="$WORK" --no-browser 2>&1 | tee "$WORK/riscof-console.log"
+  --work-dir="$WORK" --no-browser 2>&1 | tee "$ROOT/work/riscof-console.log"
 RC=${PIPESTATUS[0]}
 
 # Per-extension summary from the test_list + result report.
 python3 - "$WORK" <<'EOF'
 import re, sys, os, collections
 work = sys.argv[1]
-log = open(os.path.join(work, 'riscof-console.log')).read()
+log = open(os.path.join(work, "..", "riscof-console.log")).read()
 results = re.findall(r'(\S+)\s*:\s*(Passed|Failed)', log)
 by_ext = collections.defaultdict(lambda: [0, 0])
 for name, verdict in results:
