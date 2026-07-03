@@ -28,7 +28,7 @@ ARG MCM_COMMIT=227df8b99103f9c59f6570babf892978e293082f
 RUN git clone https://github.com/richfelker/musl-cross-make.git && \
     cd musl-cross-make && git checkout ${MCM_COMMIT} && \
     { echo 'TARGET = riscv64-linux-musl'; \
-      echo 'GCC_CONFIG += --with-arch=rv64imac --with-abi=lp64'; \
+      echo 'GCC_CONFIG += --with-arch=rv64imac --with-abi=lp64 --disable-shared'; \
       echo 'OUTPUT = /opt/cross'; } > config.mak && \
     make -j$(nproc) install && cd .. && rm -rf musl-cross-make
 ENV PATH="/opt/cross/bin:${PATH}"
