@@ -1,0 +1,45 @@
+# Boot conformance for the Linux+BusyBox target (charter layer 4 / Gate C2).
+# Usage (via run-boot.sh): expect -f linux.expect <rvemu-path> <repo-root>
+set rvemu [lindex $argv 0]
+set root [lindex $argv 1]
+set timeout 1800
+log_user 1
+
+spawn $rvemu --max-insns 60000000000 $root/targets/vendor/linux-build/fw_payload.elf
+
+expect {
+    -exact "OpenSBI v1.6" {}
+    timeout { puts "\nBOOT-FAIL: no OpenSBI banner"; exit 1 }
+    eof { puts "\nBOOT-FAIL: emulator exited before OpenSBI"; exit 1 }
+}
+expect {
+    -exact "Linux version 6.12.0" {}
+    timeout { puts "\nBOOT-FAIL: no kernel banner (C1)"; exit 1 }
+    eof { puts "\nBOOT-FAIL: emulator exited before kernel banner"; exit 1 }
+}
+expect {
+    -exact "initramfs: init complete" {}
+    timeout { puts "\nBOOT-FAIL: initramfs init did not complete"; exit 1 }
+    eof { puts "\nBOOT-FAIL: emulator exited before init"; exit 1 }
+}
+expect {
+    -exact "~ #" {}
+    timeout { puts "\nBOOT-FAIL: no BusyBox prompt"; exit 1 }
+}
+
+send "uname -a\r"
+expect {
+    -exact "Linux (none) 6.12.0 #1 Fri Jul  3 18:18:10 UTC 2026 riscv64 GNU/Linux" {}
+    timeout { puts "\nBOOT-FAIL: uname output mismatch"; exit 1 }
+}
+expect -exact "~ #"
+
+send "echo boothello\r"
+expect {
+    -exact "boothello" {}
+    timeout { puts "\nBOOT-FAIL: echo output missing"; exit 1 }
+}
+expect -exact "~ #"
+
+puts "\nBOOT-OK: linux scripted sequence matched"
+exit 0

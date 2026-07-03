@@ -1,0 +1,182 @@
+spawn ./targets/vendor/spike/install/bin/spike --isa=rv64imac_zicsr_zifencei_zicntr_sstc --instructions=15000000000 targets/vendor/linux-build/fw_payload.elf
+
+OpenSBI v1.6
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|____/_____|
+        | |
+        |_|
+
+Platform Name               : ucbbar,spike-bare
+Platform Features           : medeleg
+Platform HART Count         : 1
+Platform IPI Device         : aclint-mswi
+Platform Timer Device       : aclint-mtimer @ 10000000Hz
+Platform Console Device     : uart8250
+Platform HSM Device         : ---
+Platform PMU Device         : ---
+Platform Reboot Device      : ---
+Platform Shutdown Device    : ---
+Platform Suspend Device     : ---
+Platform CPPC Device        : ---
+Firmware Base               : 0x80000000
+Firmware Size               : 325 KB
+Firmware RW Offset          : 0x40000
+Firmware RW Size            : 69 KB
+Firmware Heap Offset        : 0x48000
+Firmware Heap Size          : 37 KB (total), 2 KB (reserved), 13 KB (used), 21 KB (free)
+Firmware Scratch Size       : 4096 B (total), 440 B (used), 3656 B (free)
+Runtime SBI Version         : 2.0
+Standard SBI Extensions     : ipi,pmu,hsm,rfnc,time,base,legacy,dbcn
+Experimental SBI Extensions : sse,fwft,dbtr
+
+Domain0 Name                : root
+Domain0 Boot HART           : 0
+Domain0 HARTs               : 0*
+Domain0 Region00            : 0x0000000010000000-0x0000000010000fff M: (I,R,W) S/U: (R,W)
+Domain0 Region01            : 0x0000000080040000-0x000000008005ffff M: (R,W) S/U: ()
+Domain0 Region02            : 0x0000000002080000-0x00000000020bffff M: (I,R,W) S/U: ()
+Domain0 Region03            : 0x0000000080000000-0x000000008003ffff M: (R,X) S/U: ()
+Domain0 Region04            : 0x0000000002000000-0x000000000207ffff M: (I,R,W) S/U: ()
+Domain0 Region05            : 0x000000000c000000-0x000000000cffffff M: (I,R,W) S/U: (R,W)
+Domain0 Region06            : 0x0000000000000000-0xffffffffffffffff M: () S/U: (R,W,X)
+Domain0 Next Address        : 0x0000000080200000
+Domain0 Next Arg1           : 0x0000000082200000
+Domain0 Next Mode           : S-mode
+Domain0 SysReset            : yes
+Domain0 SysSuspend          : yes
+
+Boot HART ID                : 0
+Boot HART Domain            : root
+Boot HART Priv Version      : v1.12
+Boot HART Base ISA          : rv64imac
+Boot HART ISA Extensions    : sstc,zicntr,sdtrig
+Boot HART PMP Count         : 16
+Boot HART PMP Granularity   : 2 bits
+Boot HART PMP Address Bits  : 54
+Boot HART MHPM Info         : 0 (0x00000000)
+Boot HART Debug Triggers    : 4 triggers
+Boot HART MIDELEG           : 0x0000000000000222
+Boot HART MEDELEG           : 0x000000000000b108
+[    0.000000] Linux version 6.12.0 (root@buildkitsandbox) (riscv64-linux-gnu-gcc (Debian 12.2.0-13) 12.2.0, GNU ld (GNU Binutils for Debian) 2.40) #1 Fri Jul  3 18:18:10 UTC 2026
+[    0.000000] Machine model: ucbbar,spike-bare
+[    0.000000] SBI specification v2.0 detected
+[    0.000000] SBI implementation ID=0x1 Version=0x10006
+[    0.000000] SBI TIME extension detected
+[    0.000000] SBI IPI extension detected
+[    0.000000] SBI RFENCE extension detected
+[    0.000000] SBI DBCN extension detected
+[    0.000000] earlycon: uart8250 at MMIO 0x0000000010000000 (options '')
+[    0.000000] printk: legacy bootconsole [uart8250] enabled
+[    0.000000] Disabled 4-level and 5-level paging
+[    0.000000] Disabled 5-level paging
+[    0.000000] efi: UEFI not found.
+[    0.000000] OF: reserved mem: 0x0000000080000000..0x000000008003ffff (256 KiB) nomap non-reusable mmode_resv1@80000000
+[    0.000000] OF: reserved mem: 0x0000000080040000..0x000000008005ffff (128 KiB) nomap non-reusable mmode_resv0@80040000
+[    0.000000] Zone ranges:
+[    0.000000]   DMA32    [mem 0x0000000080000000-0x000000008fffffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080000000-0x000000008005ffff]
+[    0.000000]   node   0: [mem 0x0000000080060000-0x000000008fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000080000000-0x000000008fffffff]
+[    0.000000] riscv: base ISA extensions acim
+[    0.000000] riscv: ELF capabilities acim
+[    0.000000] Kernel command line: console=ttyS0 earlycon=uart8250,mmio,0x10000000 no4lvl no5lvl
+[    0.000000] Dentry cache hash table entries: 32768 (order: 6, 262144 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 65536
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]       fixmap : 0xffffffc4fea00000 - 0xffffffc4ff000000   (6144 kB)
+[    0.000000]       pci io : 0xffffffc4ff000000 - 0xffffffc500000000   (  16 MB)
+[    0.000000]      vmemmap : 0xffffffc500000000 - 0xffffffc600000000   (4096 MB)
+[    0.000000]      vmalloc : 0xffffffc600000000 - 0xffffffd600000000   (  64 GB)
+[    0.000000]      modules : 0xffffffff01357000 - 0xffffffff80000000   (2028 MB)
+[    0.000000]       lowmem : 0xffffffd600000000 - 0xffffffd610000000   ( 256 MB)
+[    0.000000]       kernel : 0xffffffff80000000 - 0xffffffffffffffff   (2047 MB)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] RCU Tasks Trace: Setting shift to 0 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=1.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 64 local interrupts mapped
+[    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x24e6a1710, max_idle_ns: 440795202120 ns
+[    0.000000] sched_clock: 64 bits at 10MHz, resolution 100ns, wraps every 4398046511100ns
+[    0.000025] riscv-timer: Timer interrupt in S-mode is available via sstc extension
+[    0.000130] Console: colour dummy device 80x25
+[    0.000155] Calibrating delay loop (skipped), value calculated using timer frequency.. 20.00 BogoMIPS (lpj=40000)
+[    0.000175] pid_max: default: 32768 minimum: 301
+[    0.000230] LSM: initializing lsm=capability
+[    0.000290] Mount-cache hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.000310] Mountpoint-cache hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.012120] riscv: ELF compat mode unsupported
+[    0.012130] ASID allocator using 16 bits (65536 entries)
+[    0.012235] EFI services will not be available.
+[    0.012255] Memory: 219244K/262144K available (6380K kernel code, 4184K rwdata, 4096K rodata, 2952K init, 375K bss, 41800K reserved, 0K cma-reserved)
+[    0.012445] devtmpfs: initialized
+[    0.013100] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.013125] futex hash table entries: 256 (order: 1, 12288 bytes, linear)
+[    0.013270] pinctrl core: initialized pinctrl subsystem
+[    0.013550] DMI not present or invalid.
+[    0.013660] DMA: preallocated 128 KiB GFP_KERNEL pool for atomic allocations
+[    0.013690] DMA: preallocated 128 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.013940] thermal_sys: Registered thermal governor 'step_wise'
+[    0.013950] cpuidle: using governor menu
+[    0.048125] cpu0: Ratio of byte access time to unaligned word access is 0.00, unaligned accesses are slow
+[    0.049135] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.049150] HugeTLB: 28 KiB vmemmap can be freed for a 2.00 MiB page
+[    0.049320] ACPI: Interpreter disabled.
+[    0.049400] iommu: Default domain type: Translated
+[    0.049410] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.049565] usbcore: registered new interface driver usbfs
+[    0.049595] usbcore: registered new interface driver hub
+[    0.049625] usbcore: registered new device driver usb
+[    0.049745] mc: Linux media interface: v0.10
+[    0.049780] videodev: Linux video capture interface: v2.00
+[    0.050040] Advanced Linux Sound Architecture Driver Initialized.
+[    0.050140] clocksource: Switched to clocksource riscv_clocksource
+[    0.050335] pnp: PnP ACPI: disabled
+[    0.066580] workingset: timestamp_bits=46 max_order=16 bucket_order=0
+[    0.236030] riscv-plic: plic@c000000: mapped 31 interrupts with 1 handlers for 2 contexts.
+[    0.252165] SBI CPPC extension NOT detected!!
+[    0.287760] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[    0.288975] printk: legacy console [ttyS0] disabled
+[    0.289180] 10000000.uart: ttyS0 at MMIO 0x10000000 (irq = 1, base_baud = 625000) is a 16550A
+[    0.289205] printk: legacy console [ttyS0] enabled
+[    0.289205] printk: legacy console [ttyS0] enabled
+[    0.289230] printk: legacy bootconsole [uart8250] disabled
+[    0.289230] printk: legacy bootconsole [uart8250] disabled
+[    0.290400] mousedev: PS/2 mouse device common for all mice
+[    0.290540] i2c_dev: i2c /dev entries driver
+[    0.291345] sdhci: Secure Digital Host Controller Interface driver
+[    0.291360] sdhci: Copyright(c) Pierre Ossman
+[    0.291390] Synopsys Designware Multimedia Card Interface Driver
+[    0.291480] sdhci-pltfm: SDHCI platform and OF driver helper
+[    0.291630] usbcore: registered new interface driver usbhid
+[    0.291645] usbhid: USB HID core driver
+[    0.291775] riscv-pmu-sbi: SBI PMU extension is available
+[    0.291890] riscv-pmu-sbi: 16 firmware and 2 hardware counters
+[    0.291905] riscv-pmu-sbi: Perf sampling/filtering is not supported as sscof extension is not available
+[    0.305815] debug_vm_pgtable: [debug_vm_pgtable         ]: Validating architecture page table helpers
+[    0.306080] clk: Disabling unused clocks
+[    0.306095] PM: genpd: Disabling unused power domains
+[    0.306110] ALSA device list:
+[    0.306120]   No soundcards found.
+[    0.307100] Freeing unused kernel image (initmem) memory: 2952K
+[    0.307125] Run /init as init process
+initramfs: init complete
+~ # uname -a
+Linux (none) 6.12.0 #1 Fri Jul  3 18:18:10 UTC 2026 riscv64 GNU/Linux
+~ # echo boothello
+boothello
+~ # ls /bin | head -5
+[
+[[
+acpid
+add-shell
+addgroup
+~ # 
+CAPTURE-OK

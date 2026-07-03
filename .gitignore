@@ -2,3 +2,4 @@
 harness/work/
 targets/vendor/
 /work/
+harness/lockstep/diff/target/
