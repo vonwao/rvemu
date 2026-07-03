@@ -555,14 +555,17 @@ impl Cpu {
 
     // ---- memory (Gate A: physical only) --------------------------------
 
-    // The pinned Spike supports misaligned data accesses in hardware
-    // (rv64ui-p-ma_data expects them to succeed), so plain loads/stores do
-    // not take misalignment exceptions; only AMO/LR/SC do.
+    // The pinned Spike (default build, no --misaligned) raises misaligned
+    // exceptions on unaligned data accesses; the RISCOF privilege misalign
+    // tests require this. rv64ui-p-ma_data exercises the trap path.
     // Note: loads are traced by the caller after the register writeback, so
     // the canonical token order matches Spike (x then m).
     fn load(&mut self, vaddr: u64, size: u64) -> Result<u64, Exception> {
         if self.trigger_hit(0, vaddr) {
             return Err(Exception::Breakpoint(vaddr));
+        }
+        if vaddr % size != 0 {
+            return Err(Exception::LoadAddressMisaligned(vaddr));
         }
         self.bus.load(vaddr, size)
     }
@@ -570,6 +573,9 @@ impl Cpu {
     fn store(&mut self, vaddr: u64, val: u64, size: u64) -> Result<(), Exception> {
         if self.trigger_hit(1, vaddr) {
             return Err(Exception::Breakpoint(vaddr));
+        }
+        if vaddr % size != 0 {
+            return Err(Exception::StoreAddressMisaligned(vaddr));
         }
         self.bus.store(vaddr, val, size)?;
         self.trace_store(vaddr, val, size);
@@ -1226,10 +1232,11 @@ pub fn expand_compressed(c: u16) -> Option<u32> {
                 }
                 itype(imm, 2, 0, 2, 0x13)
             } else {
-                // c.lui
+                // c.lui (rd == x0 is a HINT on the pinned Spike: executes,
+                // writes nothing)
                 let imm = (((c >> 12 & 1) as u32) << 17 | ((c >> 2 & 31) as u32) << 12) as i32;
                 let imm = (imm << 14) >> 14;
-                if imm == 0 || rd == 0 {
+                if imm == 0 {
                     return None;
                 }
                 Some(((imm as u32) & 0xffff_f000) | (rd << 7) | 0x37)
