@@ -33,14 +33,22 @@ RUN git clone https://github.com/richfelker/musl-cross-make.git && \
     make -j$(nproc) install && cd .. && rm -rf musl-cross-make
 ENV PATH="/opt/cross/bin:${PATH}"
 
+# Linux uapi headers for the musl toolchain (BusyBox includes linux/*.h),
+# taken from the pinned kernel tree itself.
+RUN cd linux-${KERNEL_VERSION} && \
+    make ARCH=riscv headers_install INSTALL_HDR_PATH=/opt/cross/riscv64-linux-musl
+
 # --- BusyBox, static, soft-float.
 RUN cd busybox-${BUSYBOX_VERSION} && \
     make CROSS_COMPILE=riscv64-linux-musl- defconfig && \
     sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config && \
     make CROSS_COMPILE=riscv64-linux-musl- -j$(nproc) busybox && \
-    file busybox | grep -q 'statically linked' && \
-    ! riscv64-linux-musl-objdump -d busybox | grep -qE '^\s+\w+:\s+\w+\s+f(l|s)[wd]\s' \
-        || { echo 'FP instructions found in busybox'; exit 1; }
+    file busybox | grep -q 'statically linked'
+
+# Guard: the userland must contain no floating-point instructions.
+RUN cd busybox-${BUSYBOX_VERSION} && \
+    if riscv64-linux-musl-objdump -d busybox | grep -E '^\s+\w+:\s+\w+\s+f(l|s)[wd]\s'; then \
+        echo 'FP instructions found in busybox'; exit 1; fi
 
 # --- Initramfs tree.
 COPY initramfs-init /build/initramfs/init
