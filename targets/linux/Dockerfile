@@ -1,5 +1,5 @@
 # Reproducible build of the Gate C Linux target: OpenSBI fw_payload.elf
-# containing Linux 6.12.10 (rv64imac soft-float, single hart) with a static
+# containing Linux v6.12 (rv64imac soft-float, single hart) with a static
 # BusyBox 1.36.1 initramfs and the platform DTB baked in.
 FROM debian:bookworm-20250630
 
