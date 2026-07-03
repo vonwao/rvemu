@@ -93,7 +93,7 @@ const SSTATUS_MASK: u64 = MSTATUS_SIE
     | MSTATUS_FS
     | MSTATUS_SD
     | (2 << 32) /*UXL ro*/;
-const MEDELEG_WMASK: u64 = 0xb3ff; // delegatable exceptions (no M-ecall bit 11)
+const MEDELEG_WMASK: u64 = 0xb3fe; // Spike's mask: no M-ecall (11), no misaligned-fetch (0)
 const MIDELEG_WMASK: u64 = IRQ_SSIP | IRQ_STIP | IRQ_SEIP;
 const MIE_WMASK: u64 = IRQ_SSIP | IRQ_MSIP | IRQ_STIP | IRQ_MTIP | IRQ_SEIP | IRQ_MEIP;
 const SIE_MASK: u64 = IRQ_SSIP | IRQ_STIP | IRQ_SEIP;

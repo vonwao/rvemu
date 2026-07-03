@@ -91,17 +91,17 @@ impl Machine {
                     if self.cpu.trace_enabled {
                         on_trace(&self.cpu.trace_line);
                     }
-                    // Fast-forward time until an interrupt is pending. A
+                    // Idle in whole quanta until an interrupt is pending. A
                     // budget guard avoids spinning forever with interrupts
                     // disabled or masked.
                     let mut guard = 0u64;
                     while !self.cpu.has_pending_interrupt() {
-                        self.cpu.idle_tick();
+                        self.cpu.idle_slice();
                         guard += 1;
-                        if guard % 4096 == 0 {
+                        if guard % 64 == 0 {
                             self.pump_console(platform);
                         }
-                        if guard > 1_000_000_000 {
+                        if guard > 100_000_000 {
                             self.pump_console(platform);
                             return RunExit::Budget;
                         }

@@ -10,8 +10,12 @@ pub const PRV_U: u8 = 0;
 pub const PRV_S: u8 = 1;
 pub const PRV_M: u8 = 3;
 
-/// Spike ticks mtime once per this many retired instructions.
-const INSNS_PER_RTC_TICK: u64 = 100;
+/// Spike's sim loop: a 5000-instruction quantum (INTERLEAVE), with the RTC
+/// advancing INTERLEAVE/INSNS_PER_RTC_TICK = 50 ticks per completed quantum.
+/// Only retired instructions consume quantum units (trapped attempts do
+/// not); a WFI retires and then skips to the end of the quantum.
+const SLICE_INSNS: u64 = 5000;
+const TICKS_PER_SLICE: u64 = 50;
 
 /// What the CPU reports back to the driving loop after one step.
 pub enum StepResult {
@@ -32,6 +36,8 @@ pub struct Cpu {
     /// Retired-instruction count for the run budget (independent of the
     /// writable minstret CSR).
     pub retired: u64,
+    /// Position within the current Spike-style 5000-instruction quantum.
+    slice_pos: u64,
     /// Trigger module: minimal mcontrol address-match triggers like Spike's.
     pub tselect: u64,
     pub tdata1: [u64; 4],
@@ -60,6 +66,7 @@ impl Cpu {
             bus,
             reservation: None,
             retired: 0,
+            slice_pos: 0,
             tselect: 0,
             tdata1: [0; 4],
             tdata2: [0; 4],
@@ -160,12 +167,14 @@ impl Cpu {
         if m_enabled {
             if let Some(cause) = take(m_pending) {
                 self.trap_to_m(cause | (1 << 63), 0, true);
+                self.end_slice();
                 return true;
             }
         }
         if s_enabled {
             if let Some(cause) = take(s_pending) {
                 self.trap_to_s(cause | (1 << 63), 0, true);
+                self.end_slice();
                 return true;
             }
         }
@@ -213,7 +222,9 @@ impl Cpu {
         };
     }
 
-    /// Route a synchronous exception per medeleg.
+    /// Route a synchronous exception per medeleg. Any trap ends the current
+    /// Spike-style quantum (the processor slice exits early; the sim loop
+    /// counts the full slice).
     fn take_exception(&mut self, e: Exception) {
         let cause = e.cause();
         let deleg = self.csrs.medeleg >> cause & 1 != 0 && self.prv < PRV_M;
@@ -222,6 +233,7 @@ impl Cpu {
         } else {
             self.trap_to_m(cause, e.tval(), false);
         }
+        self.end_slice();
     }
 
     // ---- CSR access ----------------------------------------------------
@@ -738,10 +750,14 @@ impl Cpu {
                 StepResult::Trapped
             }
             Err(ExecOutcome::Wfi) => {
-                // Retire the wfi itself; the run loop advances time until an
-                // interrupt is pending (matching Spike's idle fast-forward).
+                // The wfi retires, then the remainder of the quantum is
+                // consumed (Spike ends the processor slice early while the
+                // sim loop still counts the full slice).
                 self.pc += ilen;
                 self.retire();
+                if self.slice_pos != 0 {
+                    self.end_slice();
+                }
                 StepResult::WaitingForInterrupt
             }
         }
@@ -757,16 +773,24 @@ impl Cpu {
         }
         self.instret_written = false;
         self.cycle_written = false;
-        if self.retired % INSNS_PER_RTC_TICK == 0 {
-            self.bus.clint.mtime = self.bus.clint.mtime.wrapping_add(1);
-            self.bus.tick_devices();
+        self.slice_pos += 1;
+        if self.slice_pos == SLICE_INSNS {
+            self.end_slice();
         }
     }
 
-    /// Advance time while idle in WFI (no instructions retiring).
-    pub fn idle_tick(&mut self) {
-        self.bus.clint.mtime = self.bus.clint.mtime.wrapping_add(1);
+    fn end_slice(&mut self) {
+        self.slice_pos = 0;
+        self.bus.clint.mtime = self.bus.clint.mtime.wrapping_add(TICKS_PER_SLICE);
         self.bus.tick_devices();
+    }
+
+    /// One idle quantum while waiting in WFI: Spike consumes a whole slice
+    /// per sim step (and bumps minstret once — a Spike quirk, replicated).
+    pub fn idle_slice(&mut self) {
+        self.csrs.instret = self.csrs.instret.wrapping_add(1);
+        self.csrs.cycle = self.csrs.cycle.wrapping_add(1);
+        self.end_slice();
     }
 
     pub fn has_pending_interrupt(&self) -> bool {
@@ -1210,15 +1234,22 @@ impl Cpu {
                 .csr_write(csr_addr, newv, insn as u64)
                 .map_err(ExecOutcome::Exception)?;
             self.set_x(rd, old);
-            // Spike's commit log names the backing register with its full
-            // value for the S-mode aliases.
-            let (name, val) = match csr_addr {
-                csr::SSTATUS => ("mstatus", self.csrs.mstatus),
-                csr::SIE => ("mie", self.csrs.mie),
-                csr::SIP => ("mip", self.mip()),
-                _ => (Self::csr_name(csr_addr), stored),
-            };
-            self.trace_csr(name, val);
+            // Spike's commit-log aliasing (observed): sstatus writes log only
+            // the backing mstatus; sie/sip log the alias view followed by
+            // the backing register.
+            match csr_addr {
+                csr::SSTATUS => self.trace_csr("mstatus", self.csrs.mstatus),
+                csr::SIE => {
+                    self.trace_csr("sie", self.csrs.mie & csr::CsrMasks::SIE_MASK);
+                    self.trace_csr("mie", self.csrs.mie);
+                }
+                csr::SIP => {
+                    let mip = self.mip();
+                    self.trace_csr("sip", mip & csr::CsrMasks::SIE_MASK);
+                    self.trace_csr("mip", mip);
+                }
+                _ => self.trace_csr(Self::csr_name(csr_addr), stored),
+            }
         } else {
             self.set_x(rd, old);
         }
