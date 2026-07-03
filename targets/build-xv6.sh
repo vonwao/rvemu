@@ -10,6 +10,13 @@
 #  - UART0_IRQ 10 -> 1: the pinned Spike wires its ns16550 to PLIC source 1
 #    (qemu-virt uses 10). rvemu models the Spike platform so lockstep and
 #    boot behave identically.
+#  - PTEs get PTE_A|PTE_D at creation: the pinned Spike implements Svade
+#    (page fault on access with A=0 / store with D=0) rather than qemu's
+#    hardware A/D update; unpatched xv6 silently trap-loops at paging-on.
+#  - UART: IER enables RX only and uartputc transmits synchronously. Spike's
+#    ns16550 asserts a level-triggered THR-empty interrupt that xv6 (tuned
+#    to qemu's edge behavior) never clears, livelocking the kernel in an
+#    interrupt storm.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HERE/vendor/xv6-riscv"
@@ -36,6 +43,37 @@ cat >> Makefile <<'EOF'
 $K/fs_img.o: fs.img
 	$(OBJCOPY) -I binary -O elf64-littleriscv fs.img $K/fs_img.o
 EOF
+
+python3 - <<'PYEOF'
+import re
+
+r = open('kernel/riscv.h').read()
+if 'PTE_A' not in r:
+    r = r.replace('#define PTE_U (1L << 4) // user can access',
+                  '#define PTE_U (1L << 4) // user can access\n#define PTE_A (1L << 6)\n#define PTE_D (1L << 7)')
+    open('kernel/riscv.h', 'w').write(r)
+
+v = open('kernel/vm.c').read()
+v = v.replace('    *pte = PA2PTE(pa) | perm | PTE_V;',
+              '    *pte = PA2PTE(pa) | perm | PTE_V | PTE_A | PTE_D;')
+open('kernel/vm.c', 'w').write(v)
+
+u = open('kernel/uart.c').read()
+u = u.replace('  WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE);',
+              '  WriteReg(IER, IER_RX_ENABLE);')
+u = u.replace('''void
+uartputc(int c)
+{
+  acquire(&uart_tx_lock);''', '''void
+uartputc(int c)
+{
+  // Synchronous transmit; see build-xv6.sh header.
+  uartputc_sync(c);
+  return;
+
+  acquire(&uart_tx_lock);''')
+open('kernel/uart.c', 'w').write(u)
+PYEOF
 
 # fs.img must exist before kernel objects link it in; build it first.
 make TOOLPREFIX=riscv-none-elf- fs.img
