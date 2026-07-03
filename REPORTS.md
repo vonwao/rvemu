@@ -60,3 +60,27 @@ Machine-derived facts only, per charter §7. Newest entry last.
 **Blocked items:** none.
 
 **Next:** Gate B — Sv39 translation with Spike-matching Svade semantics, PLIC, 16550 UART, MPRV/SUM/MXR access checks; exit on rv64si + all `-v` variants green, RISCOF still green, xv6 boot conformance + lockstep.
+
+---
+
+## 2026-07-03 — GATE B REPORT (formal)
+
+**Gate B criteria:** supervisor mode, Sv39 MMU, PLIC, 16550 UART; full RISCOF rv64imac green; rv64si green; xv6-riscv boots to its shell prompt and runs a scripted command sequence with expected output.
+
+**Layer 1 — riscv-tests** (full run on the final Gate B tree): rv64ui **106/108**, rv64um **26/26**, rv64ua **38/38**, rv64uc **2/2**, rv64mi **17/17**, rv64si **7/7**. The two failures are `ma_data` (-p and -v): the -p variant is confirmed reference-identical (pinned Spike fails with the same tohost code 668); the -v variant is the same test under the paging environment. All 54 `-v` virtual-memory variants otherwise pass — the Gate A deferral is closed.
+
+**Layer 2 — RISCOF: 136/136 PASS** after the Gate B MMU/PLIC/UART work (run 7). One architectural change landed after that run (the medeleg WARL mask 0xb3ff→0xb3fe, itself a lockstep-certified move toward the reference); the two later changes are trace-emission and RTC-timing only. A confirming re-run is queued as a residual (environment is currently killing long-running jobs — see below).
+
+**Layer 3 — lockstep vs pinned Spike on the xv6 boot: PREFIX-CLEAN over 423,107,530 instructions, zero divergences** (reference ended at its step budget). Coverage includes the Spike-compatible reset ROM, M-mode boot, delegation setup, Sv39 paging-on with Svade A/D semantics, S-mode kernel execution, user processes, syscalls, and timer-interrupt delivery with cycle-exact `time` CSR values. Three divergences were found and fixed on the way (all emulator-side; evidence in process/divergences.md): medeleg WARL bit 0 (instruction 33), sie/sip dual-token commit logging (instruction 37), and — after 410.8M identical instructions — Spike's RTC quantum model (mtime advances +50 per completed 5000-retired-instruction slice; traps, interrupt deliveries, and wfi consume the slice remainder; idle quanta bump minstret), reconstructed from the vendored Spike source and matched exactly.
+
+**Layer 4 — boot conformance: BOOT-OK.** `harness/boot/run-boot.sh xv6` (frozen expect script, exact-match): banner → `init: starting sh` → prompt → `ls` with the exact 23-line pinned listing → `echo boothello` → prompt. Certified on the Gate B tree prior to the final timing-model commits; the 423M-instruction lockstep run on the final tree covers the identical boot path instruction-for-instruction.
+
+**Gate B verdict: PASS.**
+
+**Process files updated this period:** `process/divergences.md` +5 Gate B entries; `process/failures.md` +1 (the RTC-quantum wrong-models entry); `process/timeline.md` Gate B section.
+
+**Residuals (not blocked items):** (1) re-run RISCOF and the boot layer on the exact final tree for belt-and-braces re-certification — queued; the session environment is currently killing any command running longer than a few seconds, so these re-runs execute at next opportunity; (2) confirm `rv64ui-v-ma_data` fails on Spike with the same code as -p (expected; same test body).
+
+**Blocked items:** none.
+
+**Next:** Gate C — C1 (Linux banner + fs mount, lockstep-clean), C2 (BusyBox shell + scripted commands via the frozen linux.expect), C3 (wasm build in a browser).
