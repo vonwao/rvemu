@@ -60,7 +60,7 @@ impl Machine {
     /// Calls `on_trace` with the canonical line after each retirement when
     /// tracing is enabled.
     pub fn run(&mut self, max_insns: u64, mut on_trace: impl FnMut(&str)) -> RunExit {
-        while self.cpu.csrs.instret < max_insns {
+        while self.cpu.retired < max_insns {
             match self.cpu.step() {
                 StepResult::Retired => {
                     if self.cpu.trace_enabled {
