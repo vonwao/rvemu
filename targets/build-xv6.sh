@@ -61,17 +61,27 @@ open('kernel/vm.c', 'w').write(v)
 u = open('kernel/uart.c').read()
 u = u.replace('  WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE);',
               '  WriteReg(IER, IER_RX_ENABLE);')
-u = u.replace('''void
-uartputc(int c)
-{
-  acquire(&uart_tx_lock);''', '''void
-uartputc(int c)
-{
-  // Synchronous transmit; see build-xv6.sh header.
-  uartputc_sync(c);
-  return;
+u = u.replace('''  acquire(&tx_lock);
 
-  acquire(&uart_tx_lock);''')
+  int i = 0;
+  while (i < n) {
+    while (tx_busy != 0) {
+      // wait for a UART transmit-complete interrupt
+      // to set tx_busy to 0.
+      sleep(&tx_chan, &tx_lock);
+    }
+
+    WriteReg(THR, buf[i]);
+    i += 1;
+    tx_busy = 1;
+  }
+
+  release(&tx_lock);''', '''  // Synchronous transmit; see build-xv6.sh header. Spike's THR never
+  // stays busy, so this cannot block.
+  acquire(&tx_lock);
+  for (int i = 0; i < n; i++)
+    uartputc_sync(buf[i]);
+  release(&tx_lock);''')
 open('kernel/uart.c', 'w').write(u)
 PYEOF
 
