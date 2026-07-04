@@ -29,3 +29,9 @@ Dated, ordered, descriptive. Pass/fail claims are only restated here after the h
 - **~17:5x** Gate C start. fw_payload PIE load-offset fixed (divergence at lockstep instruction 4); **Linux 6.12 boots to the BusyBox shell on rvemu**; frozen boot layer: `run-boot.sh linux` → **BOOT-OK** (exact `uname -a` and scripted echo).
 - **~18:0x** **C3: wasm build** (hand-rolled extern "C" exports, no new dependencies) boots the same fw_payload to the shell and executes a typed command under Node driving the module exactly as the browser page does — `WASM-SHELL-OK`, ~400M instructions. Browser page at `web/index.html` (+`web/serve.sh`).
 - **~18:0x–00:1x** Lockstep hunt through OpenSBI+Linux: ten divergences fixed (see divergences.md Gate C). Final: **prefix-clean 317,547,717 instructions, zero divergences**, with deterministic replay showing the shell prompt inside the clean region. riscv-tests regression: 106/108 (ma_data pair only). RISCOF regression re-running post-changes.
+
+## 2026-07-04 (early) — Browser-demo responsiveness
+
+- Operator confirmed **C3 in the literal sense: Linux booted in a browser tab** via web/serve.sh — but typing was unusable. Two causes: the page ran 30M-instruction chunks (keystrokes only enter between wasm calls), and translation had no cache (a full 3-level walk per fetch).
+- Fixes: adaptive run-chunking targeting ~40ms per call, and a Spike-equivalent TLB (flushed on satp/sfence.vma/mstatus writes, trap entries, xret) + LTO. Native speed 4 → 16 MIPS.
+- **Re-certification of the changed tree, all green:** riscv-tests 106/108 (ma_data pair only), RISCOF 136/136, both frozen boot layers BOOT-OK, wasm smoke WASM-SHELL-OK, and the Linux lockstep PREFIX-CLEAN over the identical 317,547,717 instructions. Operator confirmed the shell is now responsive.
