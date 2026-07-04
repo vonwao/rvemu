@@ -1138,14 +1138,16 @@ impl Cpu {
                 Ok(next)
             }
             0x03 => {
-                // sc
+                // sc (capture the stored value before rd is written: with
+                // rd == rs2 the trace would otherwise log the success code)
                 if self.reservation == Some(addr) {
                     let pa = self.translate(addr, 1).map_err(ExecOutcome::Exception)?;
+                    let val = self.x(rs2);
                     self.bus
-                        .store(pa, self.x(rs2), size)
+                        .store(pa, val, size)
                         .map_err(ExecOutcome::Exception)?;
                     self.set_x(rd, 0);
-                    self.trace_store(addr, self.x(rs2), size);
+                    self.trace_store(addr, val, size);
                 } else {
                     self.set_x(rd, 1);
                 }
