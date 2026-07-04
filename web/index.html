@@ -32,8 +32,15 @@ function drain() {
   }
 }
 
+// Adaptive chunking: keystrokes reach the emulator only between run()
+// calls, so each call targets ~40ms of wall time for responsive input.
+let chunk = 2000000n;
 function pump() {
-  const halted = exports.run(30000000n) === 1;
+  const t = performance.now();
+  const halted = exports.run(chunk) === 1;
+  const dt = performance.now() - t;
+  if (dt < 25 && chunk < 100000000n) chunk *= 2n;
+  else if (dt > 70 && chunk > 250000n) chunk /= 2n;
   drain();
   const mips = (Number(exports.retired()) / 1e6 / ((performance.now() - t0) / 1000)).toFixed(0);
   status.textContent = `retired: ${exports.retired().toLocaleString()} instructions · ${mips} MIPS · ` +

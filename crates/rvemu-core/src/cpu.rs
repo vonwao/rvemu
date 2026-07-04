@@ -54,6 +54,12 @@ pub struct Cpu {
     /// when `trace_enabled`).
     pub trace_enabled: bool,
     pub trace_line: String,
+    /// Translation cache (like Spike's TLB): direct-mapped, per access kind
+    /// (0=load, 1=store, 2=fetch). tag = va_page | 1; flushed on satp
+    /// writes, sfence.vma, mstatus/sstatus writes, traps, and mret/sret, so
+    /// it is semantically invisible.
+    tlb_tag: [[u64; 64]; 3],
+    tlb_pa_page: [[u64; 64]; 3],
 }
 
 impl Cpu {
@@ -76,7 +82,13 @@ impl Cpu {
             tohost_value: None,
             trace_enabled: false,
             trace_line: String::new(),
+            tlb_tag: [[0; 64]; 3],
+            tlb_pa_page: [[0; 64]; 3],
         }
+    }
+
+    fn flush_tlb(&mut self) {
+        self.tlb_tag = [[0; 64]; 3];
     }
 
     fn x(&self, r: u32) -> u64 {
@@ -204,6 +216,7 @@ impl Cpu {
         ms = (ms & !csr::MSTATUS_MPP_MASK) | ((self.prv as u64) << 11);
         self.csrs.mstatus = ms;
         self.prv = PRV_M;
+        self.flush_tlb();
         let base = self.csrs.mtvec & !3;
         self.pc = if self.csrs.mtvec & 3 == 1 && interrupt {
             base + 4 * (cause & 0xff)
@@ -224,6 +237,7 @@ impl Cpu {
         ms = (ms & !csr::MSTATUS_SPP) | ((self.prv as u64 & 1) << 8);
         self.csrs.mstatus = ms;
         self.prv = PRV_S;
+        self.flush_tlb();
         let base = self.csrs.stvec & !3;
         self.pc = if self.csrs.stvec & 3 == 1 && interrupt {
             base + 4 * (cause & 0xff)
@@ -454,6 +468,7 @@ impl Cpu {
             csr::SSTATUS => {
                 let m = csr::CsrMasks::SSTATUS_MASK & csr::CsrMasks::MSTATUS_WMASK;
                 self.csrs.mstatus = (self.csrs.mstatus & !m) | (val & m);
+                self.flush_tlb();
                 csr::sstatus_view(self.csrs.mstatus)
             }
             csr::SIE => {
@@ -513,10 +528,12 @@ impl Cpu {
                     // with all-ones). No TLB here, so ASID is pure storage.
                     self.csrs.satp = val & 0x8fff_ffff_ffff_ffff;
                 }
+                self.flush_tlb();
                 self.csrs.satp
             }
             csr::MSTATUS => {
                 self.csrs.mstatus = csr::legalize_mstatus(self.csrs.mstatus, val);
+                self.flush_tlb();
                 self.csrs.mstatus
             }
             csr::MISA => csr::MISA_VALUE, // writes ignored
@@ -666,6 +683,11 @@ impl Cpu {
         if eff_prv == PRV_M || self.csrs.satp >> 60 != 8 {
             return Ok(va);
         }
+        let vpage = va >> 12;
+        let idx = (vpage & 63) as usize;
+        if self.tlb_tag[acc as usize][idx] == (vpage | 1 << 63) {
+            return Ok((self.tlb_pa_page[acc as usize][idx] << 12) | (va & 0xfff));
+        }
         let page_fault = |va: u64| match acc {
             0 => Exception::LoadPageFault(va),
             1 => Exception::StorePageFault(va),
@@ -728,6 +750,8 @@ impl Cpu {
                 }
                 let vpn_low_mask = (1u64 << (9 * i)) - 1;
                 let pa_ppn = (ppn & !vpn_low_mask) | ((va >> 12) & vpn_low_mask);
+                self.tlb_tag[acc as usize][idx] = vpage | 1 << 63;
+                self.tlb_pa_page[acc as usize][idx] = pa_ppn;
                 return Ok((pa_ppn << 12) | (va & 0xfff));
             }
             i -= 1;
@@ -1244,6 +1268,7 @@ impl Cpu {
                     }
                     self.csrs.mstatus = new;
                     self.prv = mpp;
+                    self.flush_tlb();
                     self.trace_csr("mstatus", new);
                     Ok(self.csrs.mepc)
                 }
@@ -1266,6 +1291,7 @@ impl Cpu {
                     }
                     self.csrs.mstatus = new;
                     self.prv = spp;
+                    self.flush_tlb();
                     self.trace_csr("mstatus", new);
                     Ok(self.csrs.sepc)
                 }
@@ -1279,13 +1305,13 @@ impl Cpu {
                     Err(ExecOutcome::Wfi)
                 }
                 _ if insn >> 25 == 0x09 => {
-                    // sfence.vma: no TLB caching in Gate A/B design -> no-op,
-                    // but privilege/TVM check applies.
+                    // sfence.vma: flush the translation cache.
                     if self.prv == PRV_U
                         || (self.prv == PRV_S && self.csrs.mstatus & csr::MSTATUS_TVM != 0)
                     {
                         return Err(ExecOutcome::Exception(Exception::IllegalInstruction(insn as u64)));
                     }
+                    self.flush_tlb();
                     Ok(next)
                 }
                 _ => Err(ExecOutcome::Exception(Exception::IllegalInstruction(insn as u64))),
