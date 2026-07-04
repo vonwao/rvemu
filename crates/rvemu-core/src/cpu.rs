@@ -509,8 +509,9 @@ impl Cpu {
                 }
                 let mode = val >> 60;
                 if mode == 0 || mode == 8 {
-                    // ASID: WARL, we support 0 bits -> hardwire to 0.
-                    self.csrs.satp = val & 0x8000_0fff_ffff_ffff & !(0xffff << 44);
+                    // Spike keeps the full 16-bit ASID field (Linux probes it
+                    // with all-ones). No TLB here, so ASID is pure storage.
+                    self.csrs.satp = val & 0x8fff_ffff_ffff_ffff;
                 }
                 self.csrs.satp
             }
