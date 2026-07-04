@@ -170,7 +170,7 @@ impl Csrs {
             sepc: 0,
             scause: 0,
             stval: 0,
-            stimecmp: u64::MAX,
+            stimecmp: 0, // Spike's reset value (STIP asserts once STCE is on until programmed)
             satp: 0,
             instret: 0,
             cycle: 0,
