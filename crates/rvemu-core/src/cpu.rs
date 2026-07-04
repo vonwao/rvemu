@@ -312,6 +312,28 @@ impl Cpu {
                         "pmpaddr62", "pmpaddr63",
                     ];
                     NAMES[(addr - 0x3b0) as usize]
+                } else if (0xb03..=0xb1f).contains(&addr) {
+                    const N: [&str; 29] = [
+                        "mhpmcounter3", "mhpmcounter4", "mhpmcounter5", "mhpmcounter6",
+                        "mhpmcounter7", "mhpmcounter8", "mhpmcounter9", "mhpmcounter10",
+                        "mhpmcounter11", "mhpmcounter12", "mhpmcounter13", "mhpmcounter14",
+                        "mhpmcounter15", "mhpmcounter16", "mhpmcounter17", "mhpmcounter18",
+                        "mhpmcounter19", "mhpmcounter20", "mhpmcounter21", "mhpmcounter22",
+                        "mhpmcounter23", "mhpmcounter24", "mhpmcounter25", "mhpmcounter26",
+                        "mhpmcounter27", "mhpmcounter28", "mhpmcounter29", "mhpmcounter30",
+                        "mhpmcounter31",
+                    ];
+                    N[(addr - 0xb03) as usize]
+                } else if (0x323..=0x33f).contains(&addr) {
+                    const N: [&str; 29] = [
+                        "mhpmevent3", "mhpmevent4", "mhpmevent5", "mhpmevent6", "mhpmevent7",
+                        "mhpmevent8", "mhpmevent9", "mhpmevent10", "mhpmevent11", "mhpmevent12",
+                        "mhpmevent13", "mhpmevent14", "mhpmevent15", "mhpmevent16", "mhpmevent17",
+                        "mhpmevent18", "mhpmevent19", "mhpmevent20", "mhpmevent21", "mhpmevent22",
+                        "mhpmevent23", "mhpmevent24", "mhpmevent25", "mhpmevent26", "mhpmevent27",
+                        "mhpmevent28", "mhpmevent29", "mhpmevent30", "mhpmevent31",
+                    ];
+                    N[(addr - 0x323) as usize]
                 } else if (0x3a0..=0x3ae).contains(&addr) && addr % 2 == 0 {
                     const CFGS: [&str; 8] = [
                         "pmpcfg0", "pmpcfg2", "pmpcfg4", "pmpcfg6", "pmpcfg8", "pmpcfg10",
