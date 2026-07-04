@@ -120,10 +120,7 @@ pub struct Csrs {
     pub pmpcfg0: u64,
     pub pmpcfg2: u64,
     pub pmpaddr: [u64; 16],
-    /// mhpmcounter3..31 / mhpmevent3..31 (index 0 = counter 3). Writable
-    /// storage like Spike's; they never count (no events implemented).
-    pub mhpmcounter: [u64; 29],
-    pub mhpmevent: [u64; 29],
+
     pub stvec: u64,
     pub scounteren: u64,
     pub senvcfg: u64,
@@ -160,8 +157,7 @@ impl Csrs {
             // pmpaddr0 written with ~0 (54 physical-address bits stored).
             pmpcfg0: 0x1f,
             pmpcfg2: 0,
-            mhpmcounter: [0; 29],
-            mhpmevent: [0; 29],
+
             pmpaddr: {
                 let mut a = [0u64; 16];
                 a[0] = 0x3f_ffff_ffff_ffff;
