@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>rvemu — Linux in your browser</title>
+<style>
+  body { background: #0b0e14; color: #cdd6f4; font-family: ui-monospace, Menlo, monospace; margin: 0; padding: 16px; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  #status { color: #7f849c; font-size: 12px; margin-bottom: 8px; }
+  #term { background: #000; color: #d0ffd0; padding: 12px; white-space: pre-wrap; word-break: break-all;
+          height: 70vh; overflow-y: auto; font-size: 13px; line-height: 1.35; border-radius: 6px; outline: none; }
+  #term:focus { box-shadow: 0 0 0 2px #45475a; }
+</style>
+</head>
+<body>
+<h1>rvemu — RISC-V rv64imac emulator, booting Linux 6.12 + BusyBox</h1>
+<div id="status">loading…</div>
+<div id="term" tabindex="0"></div>
+<script>
+const term = document.getElementById('term');
+const status = document.getElementById('status');
+const dec = new TextDecoder();
+let exports, t0;
+
+function drain() {
+  const n = exports.console_out_len();
+  if (n > 0) {
+    const buf = new Uint8Array(exports.memory.buffer, exports.console_out_ptr(), Number(n));
+    term.textContent += dec.decode(buf);
+    exports.console_out_clear();
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+function pump() {
+  const halted = exports.run(30000000n) === 1;
+  drain();
+  const mips = (Number(exports.retired()) / 1e6 / ((performance.now() - t0) / 1000)).toFixed(0);
+  status.textContent = `retired: ${exports.retired().toLocaleString()} instructions · ${mips} MIPS · ` +
+                       (halted ? 'halted' : 'running — click the terminal and type when the prompt appears');
+  if (!halted) setTimeout(pump, 0);
+}
+
+term.addEventListener('keydown', (e) => {
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) exports.console_in(e.key.charCodeAt(0));
+  else if (e.key === 'Enter') exports.console_in(13);
+  else if (e.key === 'Backspace') exports.console_in(127);
+  else if (e.ctrlKey && e.key.length === 1) exports.console_in(e.key.toUpperCase().charCodeAt(0) - 64);
+  else return;
+  e.preventDefault();
+});
+
+(async () => {
+  status.textContent = 'fetching emulator + Linux image…';
+  const [mod, image] = await Promise.all([
+    WebAssembly.instantiateStreaming(fetch('rvemu_wasm.wasm'), {}),
+    fetch('fw_payload.elf').then(r => r.arrayBuffer()),
+  ]);
+  exports = mod.instance.exports;
+  const ptr = exports.image_alloc(image.byteLength);
+  new Uint8Array(exports.memory.buffer, ptr, image.byteLength).set(new Uint8Array(image));
+  if (exports.boot(256) !== 0) { status.textContent = 'ELF load failed'; return; }
+  term.focus();
+  t0 = performance.now();
+  pump();
+})();
+</script>
+</body>
+</html>

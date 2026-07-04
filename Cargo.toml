@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/rvemu-core", "crates/rvemu-cli"]
+members = ["crates/rvemu-core", "crates/rvemu-cli", "crates/rvemu-wasm"]
 
 [workspace.package]
 edition = "2021"

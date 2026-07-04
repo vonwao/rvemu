@@ -12,3 +12,10 @@ dependencies = [
 [[package]]
 name = "rvemu-core"
 version = "0.1.0"
+
+[[package]]
+name = "rvemu-wasm"
+version = "0.1.0"
+dependencies = [
+ "rvemu-core",
+]
