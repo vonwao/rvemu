@@ -118,6 +118,7 @@ pub struct Csrs {
     pub mip_sw: u64,
     pub mvien: u64,
     pub pmpcfg0: u64,
+    pub pmpcfg2: u64,
     pub pmpaddr: [u64; 16],
     pub stvec: u64,
     pub scounteren: u64,
@@ -154,6 +155,7 @@ impl Csrs {
             // Spike's reset: PMP region 0 covers all memory (NAPOT|RWX),
             // pmpaddr0 written with ~0 (54 physical-address bits stored).
             pmpcfg0: 0x1f,
+            pmpcfg2: 0,
             pmpaddr: {
                 let mut a = [0u64; 16];
                 a[0] = 0x3f_ffff_ffff_ffff;

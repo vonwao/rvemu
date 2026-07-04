@@ -280,6 +280,7 @@ impl Cpu {
             csr::MTVAL => "mtval",
             csr::MIP => "mip",
             csr::PMPCFG0 => "pmpcfg0",
+            0x3a2 => "pmpcfg2",
             0x308 => "mvien",
             0x309 => "mvip",
             0x7a0 => "tselect",
@@ -540,6 +541,12 @@ impl Cpu {
                 self.csrs.pmpcfg0 = val;
                 val
             }
+            0x3a2 => {
+                self.csrs.pmpcfg2 = val;
+                val
+            }
+            a if (0x3a4..=0x3ae).contains(&a) && a % 2 == 0 => 0,
+            a if (0x3c0..0x3f0).contains(&a) => 0,
             0x7a0 => {
                 // 4 triggers: writes of higher values are clamped like Spike.
                 self.tselect = val.min(3);
