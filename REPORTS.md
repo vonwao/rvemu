@@ -79,7 +79,7 @@ Machine-derived facts only, per charter §7. Newest entry last.
 
 **Process files updated this period:** `process/divergences.md` +5 Gate B entries; `process/failures.md` +1 (the RTC-quantum wrong-models entry); `process/timeline.md` Gate B section.
 
-**Residuals (not blocked items):** (1) re-run RISCOF and the boot layer on the exact final tree for belt-and-braces re-certification — queued; the session environment is currently killing any command running longer than a few seconds, so these re-runs execute at next opportunity; (2) confirm `rv64ui-v-ma_data` fails on Spike with the same code as -p (expected; same test body).
+**Residuals (not blocked items):** (1) re-run RISCOF and the boot layer on the exact final tree for belt-and-braces re-certification — queued (the transient command-killing issue is resolved; see process/failures.md); (2) ~~confirm v-ma_data on Spike~~ **closed with stronger evidence than planned**: a bounded lockstep run shows both simulators executing an identical 4,569-instruction prefix into the same infinite failure loop (the test's fail path, code 0x349, trap-loops in the v environment; uncapped Spike hangs on it forever). Reference-identical, instruction-for-instruction. Also recorded: capped Spike exits 0 on budget exhaustion — a footgun documented in process/failures.md; no harness layer relied on it.
 
 **Blocked items:** none.
 
