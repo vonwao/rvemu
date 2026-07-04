@@ -102,3 +102,9 @@ Machine-derived facts only, per charter §7. Newest entry last.
 **Process files:** divergences.md +10-entry Gate C chain; timeline.md Gate C section; failures.md silent-patch-no-op repeat noted (edit scripts now assert anchors).
 
 **Blocked items:** none.
+
+---
+
+## 2026-07-04 — Perf-change certification (translation cache + LTO)
+
+A Spike-equivalent TLB (flushed on satp writes, sfence.vma, mstatus/sstatus writes, trap entries, mret/sret) and LTO were added for demo responsiveness (4 → 16 native MIPS). Full re-certification on the changed tree: riscv-tests 106/108 (ma_data pair only), RISCOF **136/136**, xv6 and Linux frozen boot layers both **BOOT-OK**, wasm node smoke **WASM-SHELL-OK**, and the Linux lockstep re-ran **PREFIX-CLEAN over the identical 317,547,717 instructions** — the cache is architecturally invisible, byte-for-byte.
