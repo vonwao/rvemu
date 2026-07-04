@@ -404,6 +404,8 @@ impl Cpu {
             0x3a2 => self.csrs.pmpcfg2,
             a if (0x3a4..=0x3ae).contains(&a) && a % 2 == 0 => 0,
             a if (0x3c0..0x3f0).contains(&a) => 0,
+            a if (0xb03..=0xb1f).contains(&a) => self.csrs.mhpmcounter[(a - 0xb03) as usize],
+            a if (0x323..=0x33f).contains(&a) => self.csrs.mhpmevent[(a - 0x323) as usize],
             0x7a0 => self.tselect,
             0x7a1 => self.tdata1[self.tselect as usize & 3],
             0x7a2 => self.tdata2[self.tselect as usize & 3],
@@ -566,6 +568,14 @@ impl Cpu {
             }
             a if (0x3a4..=0x3ae).contains(&a) && a % 2 == 0 => 0,
             a if (0x3c0..0x3f0).contains(&a) => 0,
+            a if (0xb03..=0xb1f).contains(&a) => {
+                self.csrs.mhpmcounter[(a - 0xb03) as usize] = val;
+                val
+            }
+            a if (0x323..=0x33f).contains(&a) => {
+                self.csrs.mhpmevent[(a - 0x323) as usize] = val;
+                val
+            }
             0x7a0 => {
                 // 4 triggers: writes of higher values are clamped like Spike.
                 self.tselect = val.min(3);
