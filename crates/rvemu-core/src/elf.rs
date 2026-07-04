@@ -32,7 +32,11 @@ pub fn load(bytes: &[u8]) -> Result<LoadedElf, String> {
     if e_machine != 243 {
         return Err(format!("not a RISC-V ELF (machine {})", e_machine));
     }
-    let entry = rd64(bytes, 24);
+    // Spike/fesvr rule: ET_EXEC (2) loads at its stated addresses; any other
+    // type (e.g. OpenSBI's ET_DYN fw_payload) is loaded at DRAM_BASE.
+    let e_type = rd16(bytes, 16);
+    let load_offset: u64 = if e_type == 2 { 0 } else { 0x8000_0000 };
+    let entry = rd64(bytes, 24).wrapping_add(load_offset);
     let phoff = rd64(bytes, 32) as usize;
     let shoff = rd64(bytes, 40) as usize;
     let phentsize = rd16(bytes, 54) as usize;
@@ -51,7 +55,7 @@ pub fn load(bytes: &[u8]) -> Result<LoadedElf, String> {
             continue; // PT_LOAD only
         }
         let p_offset = rd64(bytes, p + 8) as usize;
-        let p_paddr = rd64(bytes, p + 24);
+        let p_paddr = rd64(bytes, p + 24).wrapping_add(load_offset);
         let p_filesz = rd64(bytes, p + 32) as usize;
         let p_memsz = rd64(bytes, p + 40) as usize;
         if p_offset + p_filesz > bytes.len() {

@@ -149,8 +149,14 @@ impl Csrs {
             mcause: 0,
             mtval: 0,
             mip_sw: 0,
-            pmpcfg0: 0,
-            pmpaddr: [0; 16],
+            // Spike's reset: PMP region 0 covers all memory (NAPOT|RWX),
+            // pmpaddr0 written with ~0 (54 physical-address bits stored).
+            pmpcfg0: 0x1f,
+            pmpaddr: {
+                let mut a = [0u64; 16];
+                a[0] = 0x3f_ffff_ffff_ffff;
+                a
+            },
             stvec: 0,
             scounteren: 0,
             senvcfg: 0,

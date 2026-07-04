@@ -375,7 +375,8 @@ impl Cpu {
             0x7a2 => self.tdata2[self.tselect as usize & 3],
             0x7a3 => 0,
             0x7a4 => 1 << 2, // tinfo: mcontrol (type 2) supported
-            csr::MVENDORID | csr::MARCHID | csr::MIMPID => 0,
+            csr::MVENDORID | csr::MIMPID => 0,
+            csr::MARCHID => 5, // Spike's registered architecture ID
             csr::MHARTID => 0,
             a if (csr::PMPADDR0..csr::PMPADDR0 + 16).contains(&a) => {
                 self.csrs.pmpaddr[(a - csr::PMPADDR0) as usize]
@@ -783,6 +784,8 @@ impl Cpu {
         self.slice_pos = 0;
         self.bus.clint.mtime = self.bus.clint.mtime.wrapping_add(TICKS_PER_SLICE);
         self.bus.tick_devices();
+        // Spike yields the LR/SC reservation at every quantum boundary.
+        self.reservation = None;
     }
 
     /// One idle quantum while waiting in WFI: Spike consumes a whole slice
