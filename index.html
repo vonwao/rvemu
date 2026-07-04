@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>rvemu — Linux in your browser</title>
+<style>
+  body { background: #0b0e14; color: #cdd6f4; font-family: ui-monospace, Menlo, monospace; margin: 0; padding: 16px; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  #status { color: #7f849c; font-size: 12px; margin-bottom: 8px; }
+  #term { background: #000; color: #d0d0d0; padding: 12px; font-size: 14px; line-height: 1.25;
+          border-radius: 6px; outline: none; width: fit-content; white-space: pre; }
+  #term:focus { box-shadow: 0 0 0 2px #45475a; }
+  .inv { background: #d0d0d0; color: #000; }
+  .cur { background: #7fd07f; color: #000; }
+  .f0{color:#3c3c3c}.f1{color:#e06c75}.f2{color:#98c379}.f3{color:#e5c07b}
+  .f4{color:#61afef}.f5{color:#c678dd}.f6{color:#56b6c2}.f7{color:#e6e6e6}
+  .b1{background:#e06c75}.b2{background:#98c379}.b3{background:#e5c07b}
+  .b4{background:#61afef}.b5{background:#c678dd}.b6{background:#56b6c2}.b7{background:#e6e6e6;color:#000}
+</style>
+</head>
+<body>
+<h1>rvemu — RISC-V rv64imac emulator, booting Linux 6.12 + BusyBox</h1>
+<div id="status">loading…</div>
+<div id="term" tabindex="0"></div>
+<script src="term.js"></script>
+<script>
+const termEl = document.getElementById('term');
+const status = document.getElementById('status');
+const screen = new Screen(80, 24);
+let exports, t0;
+
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+function render() {
+  let html = '';
+  for (let r = 0; r < screen.rows; r++) {
+    for (let c = 0; c < screen.cols; c++) {
+      const cell = screen.grid[r][c];
+      const isCur = screen.cursorVisible && r === screen.cy && c === screen.cx;
+      const cls = [];
+      if (isCur) cls.push('cur');
+      else {
+        if (cell.inv) cls.push('inv');
+        if (cell.fg !== null) cls.push('f' + cell.fg);
+        if (cell.bg !== null) cls.push('b' + cell.bg);
+      }
+      html += cls.length ? `<span class="${cls.join(' ')}">${esc(cell.ch)}</span>` : esc(cell.ch);
+    }
+    html += '\n';
+  }
+  termEl.innerHTML = html;
+}
+
+function drain() {
+  const n = Number(exports.console_out_len());
+  if (n > 0) {
+    screen.write(new Uint8Array(exports.memory.buffer, Number(exports.console_out_ptr()), n));
+    exports.console_out_clear();
+    for (const b of screen.takeReplies()) exports.console_in(b);
+    render();
+  }
+}
+
+// Adaptive chunking: keystrokes reach the emulator only between run()
+// calls, so each call targets ~40ms of wall time for responsive input.
+let chunk = 2000000n;
+function pump() {
+  const t = performance.now();
+  const halted = exports.run(chunk) === 1;
+  const dt = performance.now() - t;
+  if (dt < 25 && chunk < 100000000n) chunk *= 2n;
+  else if (dt > 70 && chunk > 250000n) chunk /= 2n;
+  drain();
+  const mips = (Number(exports.retired()) / 1e6 / ((performance.now() - t0) / 1000)).toFixed(0);
+  status.textContent = `retired: ${exports.retired().toLocaleString()} instructions · ${mips} MIPS · ` +
+                       (halted ? 'halted' : 'running — click the terminal and type when the prompt appears');
+  if (!halted) setTimeout(pump, 0);
+}
+
+const send = s => { for (const ch of s) exports.console_in(ch.charCodeAt(0)); };
+termEl.addEventListener('keydown', (e) => {
+  if (e.metaKey) return;
+  if (e.ctrlKey && e.key.length === 1) {
+    const c = e.key.toUpperCase().charCodeAt(0);
+    if (c >= 64 && c < 96) { exports.console_in(c - 64); e.preventDefault(); }
+    return;
+  }
+  const map = {
+    Enter: '\r', Backspace: '\x7f', Tab: '\t', Escape: '\x1b',
+    ArrowUp: '\x1b[A', ArrowDown: '\x1b[B', ArrowRight: '\x1b[C', ArrowLeft: '\x1b[D',
+    Home: '\x1b[H', End: '\x1b[F', Delete: '\x1b[3~',
+  };
+  if (map[e.key]) send(map[e.key]);
+  else if (e.key.length === 1) send(e.key);
+  else return;
+  e.preventDefault();
+});
+
+(async () => {
+  status.textContent = 'fetching emulator + Linux image…';
+  const [mod, image] = await Promise.all([
+    WebAssembly.instantiateStreaming(fetch('rvemu_wasm.wasm'), {}),
+    fetch('fw_payload.elf').then(r => r.arrayBuffer()),
+  ]);
+  exports = mod.instance.exports;
+  const ptr = exports.image_alloc(image.byteLength);
+  new Uint8Array(exports.memory.buffer, ptr, image.byteLength).set(new Uint8Array(image));
+  if (exports.boot(256) !== 0) { status.textContent = 'ELF load failed'; return; }
+  render();
+  termEl.focus();
+  t0 = performance.now();
+  pump();
+})();
+</script>
+</body>
+</html>
