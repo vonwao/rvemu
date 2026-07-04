@@ -84,3 +84,21 @@ Machine-derived facts only, per charter §7. Newest entry last.
 **Blocked items:** none.
 
 **Next:** Gate C — C1 (Linux banner + fs mount, lockstep-clean), C2 (BusyBox shell + scripted commands via the frozen linux.expect), C3 (wasm build in a browser).
+
+---
+
+## 2026-07-04 — GATE C REPORT (formal)
+
+**C1 — Linux boots lockstep-clean: EXCEEDED.** Requirement: banner + filesystem mount without a wrong-instruction divergence. Result: **PREFIX-CLEAN over 317,547,717 instructions with zero divergences** (the pinned Spike ended at its 900M-step budget; Linux's trap/interrupt density means quantum-skips, so 900M reference steps ≈ 317.5M commits). Deterministic replay of rvemu to exactly that instruction count shows the console already at the BusyBox prompt — the clean region covers OpenSBI, the kernel banner, initramfs mount, init, and the shell. Ten divergences were found and fixed on the way (instruction 4 through 21.7M; all emulator-side; full chain with evidence in process/divergences.md).
+
+**C2 — BusyBox shell with scripted commands: PASS.** Frozen boot layer `harness/boot/run-boot.sh linux` → **BOOT-OK**: OpenSBI banner, kernel banner, `initramfs: init complete`, `~ #` prompt, `uname -a` matching the pinned string exactly (`Linux (none) 6.12.0 #1 Fri Jul  3 18:18:10 UTC 2026 riscv64 GNU/Linux`), `echo boothello` → `boothello`.
+
+**C3 — WebAssembly: substance PASS, browser click pending.** `crates/rvemu-wasm` (hand-rolled extern "C" exports; no new dependencies) compiled for wasm32-unknown-unknown boots the same pinned fw_payload.elf to the BusyBox shell and executes a typed command — verified by a Node harness driving the module through the identical JS interface the page uses (`WASM-SHELL-OK`, ~400M instructions retired). The browser demo is `web/index.html` + `web/serve.sh`; the literal "in a browser tab" confirmation is one click away for the operator.
+
+**Regressions on the final tree:** riscv-tests rv64ui 106/108 (the reference-identical ma_data pair only), rv64um 26/26, rv64ua 38/38, rv64uc 2/2, rv64mi 17/17, rv64si 7/7. **RISCOF 136/136.**
+
+**Charter milestone ladder status: Gate A PASS, Gate B PASS, C1 PASS, C2 PASS, C3 functionally complete pending the browser click.** Non-goals honored throughout: interpreter only, single hart, no F/D, no networking, no block device, harness untouched since freeze.
+
+**Process files:** divergences.md +10-entry Gate C chain; timeline.md Gate C section; failures.md silent-patch-no-op repeat noted (edit scripts now assert anchors).
+
+**Blocked items:** none.
