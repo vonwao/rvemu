@@ -1325,9 +1325,10 @@ impl Cpu {
                     self.trace_csr("mie", self.csrs.mie);
                 }
                 csr::SIP => {
-                    let mip = self.mip();
-                    self.trace_csr("sip", mip & csr::CsrMasks::SIE_MASK);
-                    self.trace_csr("mip", mip);
+                    // Spike logs sip writes as mvip + mip (priv 1.13: the
+                    // writable SSIP bit lives in mvip).
+                    self.trace_csr("mvip", self.mvip());
+                    self.trace_csr("mip", self.mip());
                 }
                 csr::MIP => {
                     self.trace_csr("mvip", self.mvip());
