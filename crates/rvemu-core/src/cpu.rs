@@ -295,13 +295,29 @@ impl Cpu {
             csr::MIMPID => "mimpid",
             csr::MHARTID => "mhartid",
             _ => {
-                if (csr::PMPADDR0..csr::PMPADDR0 + 16).contains(&addr) {
-                    const NAMES: [&str; 16] = [
+                if (0x3b0..0x3f0).contains(&addr) {
+                    const NAMES: [&str; 64] = [
                         "pmpaddr0", "pmpaddr1", "pmpaddr2", "pmpaddr3", "pmpaddr4", "pmpaddr5",
                         "pmpaddr6", "pmpaddr7", "pmpaddr8", "pmpaddr9", "pmpaddr10", "pmpaddr11",
-                        "pmpaddr12", "pmpaddr13", "pmpaddr14", "pmpaddr15",
+                        "pmpaddr12", "pmpaddr13", "pmpaddr14", "pmpaddr15", "pmpaddr16",
+                        "pmpaddr17", "pmpaddr18", "pmpaddr19", "pmpaddr20", "pmpaddr21",
+                        "pmpaddr22", "pmpaddr23", "pmpaddr24", "pmpaddr25", "pmpaddr26",
+                        "pmpaddr27", "pmpaddr28", "pmpaddr29", "pmpaddr30", "pmpaddr31",
+                        "pmpaddr32", "pmpaddr33", "pmpaddr34", "pmpaddr35", "pmpaddr36",
+                        "pmpaddr37", "pmpaddr38", "pmpaddr39", "pmpaddr40", "pmpaddr41",
+                        "pmpaddr42", "pmpaddr43", "pmpaddr44", "pmpaddr45", "pmpaddr46",
+                        "pmpaddr47", "pmpaddr48", "pmpaddr49", "pmpaddr50", "pmpaddr51",
+                        "pmpaddr52", "pmpaddr53", "pmpaddr54", "pmpaddr55", "pmpaddr56",
+                        "pmpaddr57", "pmpaddr58", "pmpaddr59", "pmpaddr60", "pmpaddr61",
+                        "pmpaddr62", "pmpaddr63",
                     ];
-                    NAMES[(addr - csr::PMPADDR0) as usize]
+                    NAMES[(addr - 0x3b0) as usize]
+                } else if (0x3a0..=0x3ae).contains(&addr) && addr % 2 == 0 {
+                    const CFGS: [&str; 8] = [
+                        "pmpcfg0", "pmpcfg2", "pmpcfg4", "pmpcfg6", "pmpcfg8", "pmpcfg10",
+                        "pmpcfg12", "pmpcfg14",
+                    ];
+                    CFGS[((addr - 0x3a0) / 2) as usize]
                 } else {
                     "unknown"
                 }
