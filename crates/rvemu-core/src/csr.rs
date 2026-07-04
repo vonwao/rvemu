@@ -116,6 +116,7 @@ pub struct Csrs {
     pub mtval: u64,
     /// Software-writable mip bits only; effective mip is composed in Cpu.
     pub mip_sw: u64,
+    pub mvien: u64,
     pub pmpcfg0: u64,
     pub pmpaddr: [u64; 16],
     pub stvec: u64,
@@ -149,6 +150,7 @@ impl Csrs {
             mcause: 0,
             mtval: 0,
             mip_sw: 0,
+            mvien: 0,
             // Spike's reset: PMP region 0 covers all memory (NAPOT|RWX),
             // pmpaddr0 written with ~0 (54 physical-address bits stored).
             pmpcfg0: 0x1f,

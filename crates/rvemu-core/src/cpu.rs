@@ -122,6 +122,16 @@ impl Cpu {
         self.csrs.menvcfg >> 63 & 1 != 0
     }
 
+    /// mvip view (priv 1.13): bit 1 aliases mip.SSIP (mvien.SSIP=0 model),
+    /// bit 5 aliases mip.STIP only when menvcfg.STCE=0.
+    fn mvip(&self) -> u64 {
+        let mut v = self.csrs.mip_sw & csr::IRQ_SSIP;
+        if !self.stce() {
+            v |= self.csrs.mip_sw & csr::IRQ_STIP;
+        }
+        v
+    }
+
     /// Effective mip: software bits + CLINT-driven MTIP/MSIP + Sstc STIP.
     pub fn mip(&self) -> u64 {
         let mut v = self.csrs.mip_sw;
@@ -270,6 +280,8 @@ impl Cpu {
             csr::MTVAL => "mtval",
             csr::MIP => "mip",
             csr::PMPCFG0 => "pmpcfg0",
+            0x308 => "mvien",
+            0x309 => "mvip",
             0x7a0 => "tselect",
             0x7a1 => "tdata1",
             0x7a2 => "tdata2",
@@ -369,6 +381,8 @@ impl Cpu {
             csr::MCAUSE => self.csrs.mcause,
             csr::MTVAL => self.csrs.mtval,
             csr::MIP => self.mip(),
+            0x308 => self.csrs.mvien,
+            0x309 => self.mvip(),
             csr::PMPCFG0 => self.csrs.pmpcfg0,
             0x7a0 => self.tselect,
             0x7a1 => self.tdata1[self.tselect as usize & 3],
@@ -509,6 +523,18 @@ impl Cpu {
                 let m = csr::CsrMasks::MIP_WMASK | if self.stce() { 0 } else { csr::IRQ_STIP };
                 self.csrs.mip_sw = (self.csrs.mip_sw & !m) | (val & m);
                 self.mip()
+            }
+            0x308 => {
+                self.csrs.mvien = val & (csr::IRQ_SSIP | csr::IRQ_SEIP);
+                self.csrs.mvien
+            }
+            0x309 => {
+                let mut m = csr::IRQ_SSIP;
+                if !self.stce() {
+                    m |= csr::IRQ_STIP;
+                }
+                self.csrs.mip_sw = (self.csrs.mip_sw & !m) | (val & m);
+                self.mvip()
             }
             csr::PMPCFG0 => {
                 self.csrs.pmpcfg0 = val;
@@ -1250,6 +1276,10 @@ impl Cpu {
                     let mip = self.mip();
                     self.trace_csr("sip", mip & csr::CsrMasks::SIE_MASK);
                     self.trace_csr("mip", mip);
+                }
+                csr::MIP => {
+                    self.trace_csr("mvip", self.mvip());
+                    self.trace_csr("mip", self.mip());
                 }
                 _ => self.trace_csr(Self::csr_name(csr_addr), stored),
             }
