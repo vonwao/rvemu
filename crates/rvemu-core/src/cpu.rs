@@ -432,7 +432,7 @@ impl Cpu {
             0x7a1 => self.tdata1[self.tselect as usize & 3],
             0x7a2 => self.tdata2[self.tselect as usize & 3],
             0x7a3 => 0,
-            0x7a4 => 1 << 2, // tinfo: mcontrol (type 2) supported
+            0x7a4 => 0x0100_807c, // tinfo: Spike advertises types 2-6, 15, version 1
             csr::MVENDORID | csr::MIMPID => 0,
             csr::MARCHID => 5, // Spike's registered architecture ID
             csr::MHARTID => 0,
