@@ -102,3 +102,20 @@ After 410.8M identical instructions:
 A `csrr time` in xv6's first clockintr, off by 21 ticks. Root cause dug out of the vendored Spike source (sim.cc/execute.cc): mtime does not advance per-instruction — it advances **+50 per completed 5000-instruction quantum**, where only retired instructions consume quantum units, and **any trap, interrupt delivery, or wfi ends the processor's slice early while the sim loop counts the full slice** (so a trap effectively consumes the quantum remainder). Idle wfi quanta also bump minstret by 1 each (a Spike quirk, replicated). Two iterations were needed: per-retirement quanta alone still read 50 low at the same instruction — the missing piece was the first timer interrupt (delivered ~200 instructions earlier) consuming its slice remainder.
 
 Result: the next run was **prefix-clean over 423,107,530 instructions** (reference ended at its step budget, zero divergences), covering M/S transitions, Sv39 translation with Svade, timer interrupt delivery, and the full xv6 boot path.
+
+# Gate C (2026-07-03/04)
+
+The Linux/OpenSBI lockstep hunt: ten divergences from instruction 4 to 21.7M, then clean to the reference's budget end. Each entry emulator-side only.
+
+1. **Instruction 4 — PIE load offset.** fw_payload.elf is ET_DYN with addresses from 0; the boot-ROM entry word read 0. fesvr's rule (elfloader.cc): ET_EXEC loads as-is, everything else at DRAM_BASE. Replicated.
+2. **1,187,449 — mvip dual-token.** `csrw mip` on this priv-1.13 Spike logs `c:mvip` + `c:mip`. Implemented mvip/mvien with spec aliasing (SSIP; STIP when STCE=0).
+3. **1,188,184 — pmpaddr16 probe.** OpenSBI counts PMP regions by reading past region 15; Spike returns 0 for CSRs 0x3c0-0x3ef, rvemu trapped. (First fix attempt silently no-opped — the patch anchor didn't match; the same failure mode as the Gate B uart patch. All edit scripts now assert their anchors matched.)
+4. **1,188,192 — trace naming.** Writes to the zero PMP regions log `c:pmpaddr16`, not `c:unknown`.
+5. **1,188,204 / 1,188,217 — mhpm counters.** First made them storage-backed; Spike's own probe readback (write 1, read 0) proved they are read-zero/write-ignored in this config. Also had to *name* them so the comparator's frozen counter-CSR filter applies to the DUT's tokens symmetrically.
+6. **1,188,936 — stimecmp reset.** Spike resets stimecmp to 0 (OpenSBI reads before writing); rvemu had used u64::MAX.
+7. **1,353,366 — tinfo.** Spike advertises trigger types 2-6 + 15, version 1 (0x100807c).
+8. **6,171,158 — sip logs mvip.** Kernel now under lockstep. `csrw sip` logs `c:mvip`+`c:mip` (not sip+mip as guessed from the sie convention).
+9. **20,906,339 — sc.w with rd==rs2.** `sc.w a2, a2, (a1)` deep in kernel code: rvemu's memory write was correct but the trace token re-read rs2 *after* the success code overwrote it, logging 0 instead of the stored value. Store value now captured before rd writeback.
+10. **21,702,786 — satp ASID.** Linux probes ASID with all-ones; Spike keeps the 16-bit field. rvemu had hardwired it to 0; now stored (no TLB, so storage-only).
+
+**Final run: PREFIX-CLEAN over 317,547,717 instructions, zero divergences** (reference ended at its 900M-step budget; quantum-skips from Linux's trap/idle density mean 900M Spike steps ≈ 317.5M commits). Deterministic replay confirms the console at that exact depth is already at the BusyBox shell prompt — the clean region covers the entire boot: OpenSBI, kernel banner, initramfs mount, init, shell.
