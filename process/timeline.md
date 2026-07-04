@@ -35,3 +35,9 @@ Dated, ordered, descriptive. Pass/fail claims are only restated here after the h
 - Operator confirmed **C3 in the literal sense: Linux booted in a browser tab** via web/serve.sh — but typing was unusable. Two causes: the page ran 30M-instruction chunks (keystrokes only enter between wasm calls), and translation had no cache (a full 3-level walk per fetch).
 - Fixes: adaptive run-chunking targeting ~40ms per call, and a Spike-equivalent TLB (flushed on satp/sfence.vma/mstatus writes, trap entries, xret) + LTO. Native speed 4 → 16 MIPS.
 - **Re-certification of the changed tree, all green:** riscv-tests 106/108 (ma_data pair only), RISCOF 136/136, both frozen boot layers BOOT-OK, wasm smoke WASM-SHELL-OK, and the Linux lockstep PREFIX-CLEAN over the identical 317,547,717 instructions. Operator confirmed the shell is now responsive.
+
+## 2026-07-04 — Terminal + public demo
+
+- **VT100 terminal** (`web/term.js`, no dependencies: cursor addressing, erase, insert/delete line/char, SGR colors/inverse, scroll regions, cursor-position report) replaced the dumb `<pre>`. Verified headlessly under Node driving the real wasm emulator: vi created and saved a file, `cat` confirmed the content, top rendered its table — **TERMINAL-VERIFIED**.
+- Repo made **public** per operator instruction; demo published to **GitHub Pages from the `gh-pages` branch** (index.html, term.js, wasm build, pinned fw_payload.elf; `.nojekyll` added after the Jekyll-processed first build stalled on the 21MB image).
+- Final proof: the published artifacts, downloaded back from https://vonwao.github.io/rvemu/, boot Linux to the BusyBox prompt under Node — **LIVE-ARTIFACTS-BOOT-OK**.
