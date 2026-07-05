@@ -63,7 +63,11 @@ function drain() {
 
 // Adaptive chunking: keystrokes reach the emulator only between run()
 // calls, so each call targets ~40ms of wall time for responsive input.
+// Time pacing: the guest RTC (10MHz) must not run ahead of wall time, or
+// idle fast-forward makes games' clocks sprint and an idle tab burns a
+// whole core. When the guest is ahead, sleep the difference (capped).
 let chunk = 2000000n;
+let mtime0 = 0, wall0 = 0;
 function pump() {
   const t = performance.now();
   const halted = exports.run(chunk) === 1;
@@ -72,9 +76,17 @@ function pump() {
   else if (dt > 70 && chunk > 250000n) chunk /= 2n;
   drain();
   const mips = (Number(exports.retired()) / 1e6 / ((performance.now() - t0) / 1000)).toFixed(0);
+  const guestMs = (Number(exports.mtime()) - mtime0) / 10000; // 10MHz -> ms
+  const wallMs = performance.now() - wall0;
+  let ahead = guestMs - wallMs;
+  if (ahead < -2000) { // cap catch-up credit after CPU-bound phases
+    wall0 = performance.now();
+    mtime0 = Number(exports.mtime()) + 2000 * 10000;
+    ahead = -2000;
+  }
   status.textContent = `retired: ${exports.retired().toLocaleString()} instructions · ${mips} MIPS · ` +
                        (halted ? 'halted' : 'running — click the terminal and type when the prompt appears');
-  if (!halted) setTimeout(pump, 0);
+  if (!halted) setTimeout(pump, ahead > 5 ? Math.min(ahead, 250) : 0);
 }
 
 const send = s => { for (const ch of s) exports.console_in(ch.charCodeAt(0)); };
@@ -109,6 +121,8 @@ termEl.addEventListener('keydown', (e) => {
   render();
   termEl.focus();
   t0 = performance.now();
+  mtime0 = Number(exports.mtime());
+  wall0 = t0;
   pump();
 })();
 </script>
