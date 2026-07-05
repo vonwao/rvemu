@@ -41,3 +41,11 @@ Dated, ordered, descriptive. Pass/fail claims are only restated here after the h
 - **VT100 terminal** (`web/term.js`, no dependencies: cursor addressing, erase, insert/delete line/char, SGR colors/inverse, scroll regions, cursor-position report) replaced the dumb `<pre>`. Verified headlessly under Node driving the real wasm emulator: vi created and saved a file, `cat` confirmed the content, top rendered its table — **TERMINAL-VERIFIED**.
 - Repo made **public** per operator instruction; demo published to **GitHub Pages from the `gh-pages` branch** (index.html, term.js, wasm build, pinned fw_payload.elf; `.nojekyll` added after the Jekyll-processed first build stalled on the 21MB image).
 - Final proof: the published artifacts, downloaded back from https://vonwao.github.io/rvemu/, boot Linux to the BusyBox prompt under Node — **LIVE-ARTIFACTS-BOOT-OK**.
+
+## 2026-07-05 — Extras step 1: time pacing + Tetris, live
+
+- **extras/ track created** with its governance README (certified targets and harness untouched; extras get separate pinned recipes and their own verification).
+- **Time pacing**: read-only `mtime` export from the wasm; the page caps the guest RTC at wall time (with bounded catch-up credit), so timing-based programs run at human speed and an idle tab no longer burns a core. Diagnosed en route: without pacing, guest select() waits fast-forward — Tetris played itself to game-over (deterministically scoring 12, twice: the guest clock seeds its RNG identically each run).
+- **linux-demo image**: Docker layer on the pinned base — Micro Tetris (troglobit/tetris `aafa95e`) static rv64imac/musl, tty size set at init (serial consoles report 0×0; Tetris refused to start until `stty rows 24 cols 80`).
+- **Verification** (`extras/verify-demo.mjs`, paced like the page): boot → prompt → binary present → Tetris running fullscreen mid-game → `q` back to prompt — **DEMO-VERIFIED**.
+- Published: gh-pages now serves the pacing page + demo image; served ELF sha256 matches the locally verified build (`ffbfa918…`).
