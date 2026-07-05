@@ -129,3 +129,10 @@ pub extern "C" fn console_out_clear() {
 pub extern "C" fn retired() -> u64 {
     STATE.with(|s| s.borrow().as_ref().map_or(0, |st| st.machine.cpu.retired))
 }
+
+/// Guest RTC (CLINT mtime, 10MHz timebase). Read-only; lets the page pace
+/// emulated time to wall time so interactive programs run at human speed.
+#[no_mangle]
+pub extern "C" fn mtime() -> u64 {
+    STATE.with(|s| s.borrow().as_ref().map_or(0, |st| st.machine.cpu.bus.clint.mtime))
+}
