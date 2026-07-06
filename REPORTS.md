@@ -108,3 +108,11 @@ Machine-derived facts only, per charter §7. Newest entry last.
 ## 2026-07-04 — Perf-change certification (translation cache + LTO)
 
 A Spike-equivalent TLB (flushed on satp writes, sfence.vma, mstatus/sstatus writes, trap entries, mret/sret) and LTO were added for demo responsiveness (4 → 16 native MIPS). Full re-certification on the changed tree: riscv-tests 106/108 (ma_data pair only), RISCOF **136/136**, xv6 and Linux frozen boot layers both **BOOT-OK**, wasm node smoke **WASM-SHELL-OK**, and the Linux lockstep re-ran **PREFIX-CLEAN over the identical 317,547,717 instructions** — the cache is architecturally invisible, byte-for-byte.
+
+---
+
+## 2026-07-06 — Extras-change certification (virtio-net in core bus)
+
+The extras networking step added a virtio-mmio net device to `rvemu-core` (opt-in `enable_net()`; only the wasm demo build calls it — certified targets, harness, CLI and lockstep paths never instantiate it) plus a JS user-mode gateway on the page. Because shared core files (`bus.rs`, new `virtio.rs`) changed, the battery re-ran on the changed tree: virtio ring unit tests 4/4, riscv-tests 106/108 (the reference-identical ma_data pair only), **RISCOF 136/136**, xv6 and Linux frozen boot layers **BOOT-OK**, demo verification **DEMO-VERIFIED** (Tetris paced + fb dark-at-boot/pixels-on-write), networking **NET-VERIFIED** (hermetic stubbed wget, length-checked; `--live` fetched this repo's README from real raw.githubusercontent.com from inside the guest), and a bounded 30M-instruction Linux lockstep vs the pinned Spike ran **PREFIX-CLEAN** (comparator rc=3, Spike budget exhausted first).
+
+Extras non-determinism note: rx frame delivery timing is host-driven, so guest runs *with network traffic* are not replay-deterministic; certified images carry no NIC and are unaffected. The charter non-goal "no networking" remains honored on every certified path.
