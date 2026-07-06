@@ -24,6 +24,8 @@ class Screen {
     this.state = 'norm';
     this.params = '';
     this.cursorVisible = true;
+    this.utfNeed = 0; // pending UTF-8 continuation bytes
+    this.utfCp = 0;
   }
 
   blankCell() { return { ch: ' ', fg: null, bg: null, bold: false, inv: false }; }
@@ -134,13 +136,22 @@ class Screen {
   write(bytes) {
     for (const b of bytes) {
       if (this.state === 'norm') {
+        if (this.utfNeed > 0 && b >= 0x80 && b < 0xc0) {
+          this.utfCp = (this.utfCp << 6) | (b & 0x3f);
+          if (--this.utfNeed === 0 && this.utfCp >= 0x20) this.put(String.fromCodePoint(this.utfCp));
+          continue;
+        }
+        this.utfNeed = 0;
         if (b === 0x1b) this.state = 'esc';
         else if (b === 0x0a) this.lf();
         else if (b === 0x0d) this.cx = 0;
         else if (b === 0x08) this.cx = Math.max(0, this.cx - 1);
         else if (b === 0x09) this.cx = Math.min(this.cols - 1, (this.cx & ~7) + 8);
         else if (b === 0x07) { /* bell */ }
-        else if (b >= 0x20) this.put(String.fromCharCode(b));
+        else if (b >= 0xf0 && b < 0xf8) { this.utfNeed = 3; this.utfCp = b & 0x07; }
+        else if (b >= 0xe0) { this.utfNeed = 2; this.utfCp = b & 0x0f; }
+        else if (b >= 0xc0) { this.utfNeed = 1; this.utfCp = b & 0x1f; }
+        else if (b >= 0x20 && b < 0x80) this.put(String.fromCharCode(b));
       } else if (this.state === 'esc') {
         if (b === 0x5b /* [ */) { this.state = 'csi'; this.params = ''; }
         else if (b === 0x4d /* M reverse index */) { if (this.cy === this.top) this.scrollDown(); else this.cy--; this.state = 'norm'; }

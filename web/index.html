@@ -69,6 +69,7 @@ function drain() {
 // whole core. When the guest is ahead, sleep the difference (capped).
 let chunk = 2000000n;
 let mtime0 = 0, wall0 = 0;
+let mipsR0 = 0, mipsT0 = 0, mipsText = '…';
 function pump() {
   const t = performance.now();
   // Guest-time ceiling: wall elapsed + 50ms slack, in 10MHz ticks.
@@ -79,7 +80,15 @@ function pump() {
   else if (dt > 70 && chunk > 250000n) chunk /= 2n;
   drain();
   blitFb();
-  const mips = (Number(exports.retired()) / 1e6 / ((performance.now() - t0) / 1000)).toFixed(0);
+  // Windowed speed: instructions retired over the last ~500ms of wall time,
+  // so an idle (paced) guest reads "idle" instead of a decaying average.
+  const nowMs = performance.now();
+  if (nowMs - mipsT0 >= 500) {
+    const r = Number(exports.retired());
+    const m = (r - mipsR0) / 1e6 / ((nowMs - mipsT0) / 1000);
+    mipsText = m < 1 ? 'idle' : `${m.toFixed(0)} MIPS`;
+    mipsR0 = r; mipsT0 = nowMs;
+  }
   const guestMs = (Number(exports.mtime()) - mtime0) / 10000; // 10MHz -> ms
   const wallMs = performance.now() - wall0;
   let ahead = guestMs - wallMs;
@@ -90,7 +99,7 @@ function pump() {
     mtime0 = Number(exports.mtime());
     ahead = 0;
   }
-  status.textContent = `retired: ${exports.retired().toLocaleString()} instructions · ${mips} MIPS · ` +
+  status.textContent = `retired: ${exports.retired().toLocaleString()} instructions · ${mipsText} · ` +
                        (halted ? 'halted' : 'running — click the terminal and type when the prompt appears');
   if (!halted) setTimeout(pump, ahead > 5 ? Math.min(ahead, 250) : 0);
 }
@@ -122,7 +131,8 @@ function blitFb() {
   if (fbVisible) fbCtx.putImageData(fbImage, 0, 0);
 }
 
-const send = s => { for (const ch of s) exports.console_in(ch.charCodeAt(0)); };
+const utf8 = new TextEncoder();
+const send = s => { for (const b of utf8.encode(s)) exports.console_in(b); };
 termEl.addEventListener('keydown', (e) => {
   if (e.metaKey) return;
   if (e.ctrlKey && e.key.length === 1) {
@@ -156,6 +166,7 @@ termEl.addEventListener('keydown', (e) => {
   t0 = performance.now();
   mtime0 = Number(exports.mtime());
   wall0 = t0;
+  mipsT0 = t0;
   pump();
 })();
 </script>
