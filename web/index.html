@@ -21,7 +21,7 @@
 <body>
 <h1>rvemu — RISC-V rv64imac emulator, booting Linux 6.12 + BusyBox</h1>
 <div id="status">loading…</div>
-<canvas id="fb" width="800" height="600" style="display:none; background:#000; border-radius:6px; margin-bottom:10px; max-width:100%;"></canvas>
+<canvas id="fb" width="800" height="600" title="click for fullscreen" style="display:none; background:#000; border-radius:6px; margin-bottom:10px; width:100%; max-width:1200px; image-rendering:pixelated; cursor:zoom-in;"></canvas>
 <div id="term" tabindex="0"></div>
 <script src="term.js"></script>
 <script src="net.js"></script>
@@ -151,7 +151,7 @@ function blitFb() {
 
 const utf8 = new TextEncoder();
 const send = s => { for (const b of utf8.encode(s)) exports.console_in(b); };
-termEl.addEventListener('keydown', (e) => {
+function onKey(e) {
   if (e.metaKey) return;
   if (e.ctrlKey && e.key.length === 1) {
     const c = e.key.toUpperCase().charCodeAt(0);
@@ -167,6 +167,15 @@ termEl.addEventListener('keydown', (e) => {
   else if (e.key.length === 1) send(e.key);
   else return;
   e.preventDefault();
+}
+termEl.addEventListener('keydown', onKey);
+// Fullscreen screen: click the canvas; keystrokes keep flowing to the guest.
+fbCanvas.addEventListener('click', () => {
+  if (document.fullscreenElement === fbCanvas) document.exitFullscreen();
+  else if (fbCanvas.requestFullscreen) fbCanvas.requestFullscreen();
+});
+document.addEventListener('keydown', (e) => {
+  if (document.fullscreenElement === fbCanvas) onKey(e);
 });
 
 (async () => {
