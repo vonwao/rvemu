@@ -13,16 +13,18 @@ RUN git clone https://github.com/troglobit/tetris.git /build/tetris && \
 # Serial ttys have no window size; tetris (and friends) need one.
 COPY demo-init /build/initramfs/init
 
-# Framebuffer console: simple-framebuffer at 0x90000000 (800x600 rgb565),
-# fbcon + boot logo. Lockstep note: the fb region does not exist on the
-# pinned Spike, so this image is not Spike-comparable (extras/README.md).
+# Framebuffer: simple-framebuffer at 0x90000000 (800x600 rgb565), exposed as
+# /dev/fb0 only — no fbcon, no boot logo, so the screen stays black until a
+# program draws real graphics (the page shows the canvas on the first nonzero
+# pixel). Kernel messages go to the serial console alone. Lockstep note: the
+# fb region does not exist on the pinned Spike, so this image is not
+# Spike-comparable (extras/README.md).
 COPY platform-demo.dts /build/platform-demo.dts
 RUN dtc -I dts -O dtb -o /build/platform-demo.dtb /build/platform-demo.dts && \
     cd /build/linux-6.12 && \
     scripts/config --enable CONFIG_FB --enable CONFIG_FB_SIMPLE \
       --enable CONFIG_FB_DEVICE \
-      --enable CONFIG_FRAMEBUFFER_CONSOLE --enable CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY \
-      --enable CONFIG_LOGO --enable CONFIG_LOGO_LINUX_CLUT224 --enable CONFIG_FONT_8x16
+      --disable CONFIG_FRAMEBUFFER_CONSOLE --disable CONFIG_LOGO
 
 RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\n' >> /build/initramfs.list && \
     cd /build/linux-6.12 && \

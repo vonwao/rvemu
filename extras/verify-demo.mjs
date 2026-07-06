@@ -40,8 +40,24 @@ function runPaced(pred, ms) {
   return false;
 }
 
+function fbNonzero() {
+  const vlen = Number(e.vram_len());
+  if (!vlen) return -1;
+  const vram = new Uint8Array(e.memory.buffer, Number(e.vram_ptr()), vlen);
+  let nz = 0;
+  for (let i = 0; i < vlen; i++) if (vram[i] !== 0) nz++;
+  return nz;
+}
+
 if (!runUntil(() => raw.includes('~ #'), 240000)) { console.log('DEMO-NO-PROMPT'); process.exit(1); }
 console.log('DEMO-PROMPT-OK');
+// Single-screen UX invariant: no fbcon/logo, so the framebuffer must still be
+// all-black at the prompt (the page keeps the canvas hidden until the first
+// nonzero pixel).
+const bootNz = fbNonzero();
+const darkOk = bootNz === 0;
+console.log(`FB nonzero bytes at prompt: ${bootNz}`);
+console.log(darkOk ? 'FB-DARK-AT-BOOT-OK' : 'FB-NOT-DARK-AT-BOOT');
 send('ls -la /bin/tetris\r');
 if (!runUntil(() => /tetris/.test(screen.toText()) && raw.includes('-rwxr-xr-x'), 15000)) { console.log('TETRIS-MISSING'); console.log(screen.toText()); process.exit(1); }
 console.log('TETRIS-PRESENT');
@@ -58,16 +74,14 @@ console.log(inGame ? 'TETRIS-RUNNING-FULLSCREEN' : 'TETRIS-NOT-RUNNING');
 send('q');
 const back = runPaced(() => screen.toText().split('\n').some(l => l.includes('~ #')), 20000);
 console.log(back ? 'QUIT-TO-PROMPT-OK' : 'QUIT-FAIL');
-// Framebuffer: the kernel logo + fbcon must have drawn real pixels.
-const vlen = Number(e.vram_len());
-let nonzero = 0;
-if (vlen) {
-  const vram = new Uint8Array(e.memory.buffer, Number(e.vram_ptr()), vlen);
-  for (let i = 0; i < vlen; i++) if (vram[i] !== 0) nonzero++;
-}
+// Framebuffer: a guest program writing /dev/fb0 must produce visible pixels
+// (this is the path a graphical app draws through).
+send('dd if=/dev/urandom of=/dev/fb0 bs=1600 count=100 2>/dev/null; echo FBWRITE-$?\r');
+runUntil(() => raw.includes('FBWRITE-0'), 20000);
+const nonzero = fbNonzero();
 const fbOk = nonzero > 10000;
-console.log(`FB nonzero bytes: ${nonzero}`);
+console.log(`FB nonzero bytes after /dev/fb0 write: ${nonzero}`);
 console.log(fbOk ? 'FB-PIXELS-OK' : 'FB-BLANK');
-const ok = inGame && back && fbOk;
+const ok = darkOk && inGame && back && fbOk;
 console.log(ok ? 'DEMO-VERIFIED' : 'DEMO-FAIL');
 process.exit(ok ? 0 : 1);

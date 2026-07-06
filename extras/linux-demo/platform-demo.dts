@@ -8,7 +8,7 @@
 
 	chosen {
 		stdout-path = "/soc/uart@10000000";
-		bootargs = "console=tty0 console=ttyS0 earlycon=uart8250,mmio,0x10000000 no4lvl no5lvl";
+		bootargs = "console=ttyS0 earlycon=uart8250,mmio,0x10000000 no4lvl no5lvl";
 	};
 
 	framebuffer@90000000 {
