@@ -53,7 +53,32 @@ RUN wget -q -O /build/initramfs/doom1.wad https://distro.ibiblio.org/slitaz/sour
     printf '#!/bin/sh\nexec fbdoom -iwad /doom1.wad "$@"\n' > /build/initramfs/bin/doom && \
     chmod +x /build/initramfs/bin/doom
 
-RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\nfile /bin/fbdoom /build/initramfs/bin/fbdoom 0755 0 0\nfile /bin/doom /build/initramfs/bin/doom 0755 0 0\nfile /doom1.wad /build/initramfs/doom1.wad 0644 0 0\n' >> /build/initramfs.list && \
+# links2 in graphics mode: fb output (/dev/fb0), mouse via /dev/input/mice,
+# plain http (the page gateway terminates TLS). Static musl with zlib+libpng.
+ARG ZLIB_URL=https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+ARG LIBPNG_URL=https://downloads.sourceforge.net/project/libpng/libpng16/1.6.43/libpng-1.6.43.tar.gz
+ARG LINKS_URL=http://links.twibright.com/download/links-2.30.tar.gz
+RUN mkdir -p /opt/sysroot && cd /build && \
+    wget -q -O zlib.tgz ${ZLIB_URL} && tar xzf zlib.tgz && cd zlib-1.3.1 && \
+    CC=riscv64-linux-musl-gcc ./configure --static --prefix=/opt/sysroot && \
+    make -j$(nproc) && make install
+RUN cd /build && wget -q -O libpng.tgz ${LIBPNG_URL} && tar xzf libpng.tgz && cd libpng-1.6.43 && \
+    ./configure --host=riscv64-linux-musl --disable-shared --prefix=/opt/sysroot \
+      CC=riscv64-linux-musl-gcc CPPFLAGS=-I/opt/sysroot/include LDFLAGS=-L/opt/sysroot/lib && \
+    make -j$(nproc) && make install
+RUN cd /build && wget -q -O links.tgz ${LINKS_URL} && tar xzf links.tgz && cd links-2.30 && \
+    ./configure --host=riscv64-linux-musl --enable-graphics --with-fb \
+      --without-x --without-directfb --without-libjpeg --without-libtiff --without-openmp \
+      --without-ssl --without-zstd --without-brotli --without-freetype --without-librsvg \
+      CC=riscv64-linux-musl-gcc CPPFLAGS=-I/opt/sysroot/include \
+      LDFLAGS="-static -L/opt/sysroot/lib" && \
+    make -j$(nproc) && \
+    cp links /build/initramfs/bin/links && \
+    file /build/initramfs/bin/links | grep -q 'statically linked' && \
+    printf '#!/bin/sh\nexec links -g "${1:-http://raw.githubusercontent.com/vonwao/rvemu/main/README.md}"\n' > /build/initramfs/bin/browse && \
+    chmod +x /build/initramfs/bin/browse
+
+RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\nfile /bin/fbdoom /build/initramfs/bin/fbdoom 0755 0 0\nfile /bin/doom /build/initramfs/bin/doom 0755 0 0\nfile /doom1.wad /build/initramfs/doom1.wad 0644 0 0\nfile /bin/links /build/initramfs/bin/links 0755 0 0\nfile /bin/browse /build/initramfs/bin/browse 0755 0 0\n' >> /build/initramfs.list && \
     cd /build/linux-6.12 && \
     make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- olddefconfig && \
     make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc) Image && \
