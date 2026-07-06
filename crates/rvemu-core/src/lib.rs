@@ -11,5 +11,6 @@ pub mod platform;
 pub mod plic;
 pub mod uart;
 pub mod trap;
+pub mod virtio;
 
 pub use platform::Platform;

@@ -55,6 +55,7 @@ pub extern "C" fn boot(ram_mib: usize) -> i32 {
         };
         let mut machine = machine::Machine::new(&loaded, ram_mib, &[]);
         machine.cpu.bus.enable_vram();
+        machine.cpu.bus.enable_net();
         STATE.with(|s| {
             *s.borrow_mut() = Some(State {
                 machine,
@@ -172,4 +173,68 @@ pub extern "C" fn vram_len() -> usize {
 #[no_mangle]
 pub extern "C" fn mtime() -> u64 {
     STATE.with(|s| s.borrow().as_ref().map_or(0, |st| st.machine.cpu.bus.clint.mtime))
+}
+
+// --- Network frame exchange (virtio-net <-> JS gateway) ---
+// Guest->host frames accumulate length-prefixed (u16 LE + frame bytes) in
+// the device; JS drains them like console output. Host->guest frames are
+// staged into a scratch buffer and pushed to the device's rx queue.
+
+thread_local! {
+    static NET_RX_BUF: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+}
+
+#[no_mangle]
+pub extern "C" fn net_tx_len() -> usize {
+    STATE.with(|s| {
+        s.borrow()
+            .as_ref()
+            .map_or(0, |st| st.machine.cpu.bus.net.as_ref().map_or(0, |n| n.tx_frames.len()))
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn net_tx_ptr() -> *const u8 {
+    STATE.with(|s| {
+        s.borrow().as_ref().map_or(std::ptr::null(), |st| {
+            st.machine.cpu.bus.net.as_ref().map_or(std::ptr::null(), |n| n.tx_frames.as_ptr())
+        })
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn net_tx_clear() {
+    STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            if let Some(n) = st.machine.cpu.bus.net.as_mut() {
+                n.tx_frames.clear();
+            }
+        }
+    });
+}
+
+/// Reserve space for one host->guest frame; JS writes bytes then calls
+/// net_rx_push().
+#[no_mangle]
+pub extern "C" fn net_rx_alloc(len: usize) -> *mut u8 {
+    NET_RX_BUF.with(|b| {
+        let mut b = b.borrow_mut();
+        b.clear();
+        b.resize(len, 0);
+        b.as_mut_ptr()
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn net_rx_push() {
+    NET_RX_BUF.with(|b| {
+        let b = b.borrow();
+        STATE.with(|s| {
+            if let Some(st) = s.borrow_mut().as_mut() {
+                if let Some(n) = st.machine.cpu.bus.net.as_mut() {
+                    n.rx_push(&b);
+                }
+            }
+        });
+    });
 }
