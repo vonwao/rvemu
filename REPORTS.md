@@ -116,3 +116,9 @@ A Spike-equivalent TLB (flushed on satp writes, sfence.vma, mstatus/sstatus writ
 The extras networking step added a virtio-mmio net device to `rvemu-core` (opt-in `enable_net()`; only the wasm demo build calls it — certified targets, harness, CLI and lockstep paths never instantiate it) plus a JS user-mode gateway on the page. Because shared core files (`bus.rs`, new `virtio.rs`) changed, the battery re-ran on the changed tree: virtio ring unit tests 4/4, riscv-tests 106/108 (the reference-identical ma_data pair only), **RISCOF 136/136**, xv6 and Linux frozen boot layers **BOOT-OK**, demo verification **DEMO-VERIFIED** (Tetris paced + fb dark-at-boot/pixels-on-write), networking **NET-VERIFIED** (hermetic stubbed wget, length-checked; `--live` fetched this repo's README from real raw.githubusercontent.com from inside the guest), and a bounded 30M-instruction Linux lockstep vs the pinned Spike ran **PREFIX-CLEAN** (comparator rc=3, Spike budget exhausted first).
 
 Extras non-determinism note: rx frame delivery timing is host-driven, so guest runs *with network traffic* are not replay-deterministic; certified images carry no NIC and are unaffected. The charter non-goal "no networking" remains honored on every certified path.
+
+---
+
+## 2026-07-06 — Extras-change certification (virtio-input in core bus)
+
+virtio-input (evdev keyboard/mouse for the demo page) added behind opt-in `enable_input()`; certified paths never instantiate it. Battery on the changed tree: unit tests 5/5, riscv-tests 106/108 (reference-identical ma_data pair only), **RISCOF 136/136**, xv6 and Linux frozen boot layers **BOOT-OK**, **DEMO-VERIFIED**, **NET-VERIFIED** (incl. live fetch), **DOOM-VERIFIED** (device bound, events byte-exact in-guest, rich frame drawn), bounded 30M Linux lockstep **PREFIX-CLEAN**.
