@@ -73,6 +73,13 @@
 			interrupt-controller;
 		};
 
+		virtio_mmio@10002000 {
+			compatible = "virtio,mmio";
+			reg = <0x0 0x10002000 0x0 0x1000>;
+			interrupt-parent = <&plic>;
+			interrupts = <3>;
+		};
+
 		virtio_mmio@10001000 {
 			compatible = "virtio,mmio";
 			reg = <0x0 0x10001000 0x0 0x1000>;

@@ -33,7 +33,27 @@ RUN cd /build/linux-6.12 && \
       --enable CONFIG_PACKET --enable CONFIG_NETDEVICES --enable CONFIG_NET_CORE \
       --enable CONFIG_VIRTIO_MENU --enable CONFIG_VIRTIO_MMIO --enable CONFIG_VIRTIO_NET
 
-RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\n' >> /build/initramfs.list && \
+# Input: virtio-input (keyboard + mouse events from the page canvas),
+# evdev for fbDOOM, mousedev (/dev/input/mice) for links-style fb apps.
+RUN cd /build/linux-6.12 && \
+    scripts/config --enable CONFIG_INPUT --enable CONFIG_INPUT_EVDEV \
+      --enable CONFIG_INPUT_MOUSEDEV --enable CONFIG_VIRTIO_INPUT
+
+# fbDOOM (pinned) drawing to /dev/fb0, static musl; shareware doom1.wad
+# (freely distributable, pinned sha256). `doom` wrapper for the demo.
+ARG FBDOOM_COMMIT=17280163bc95e5d954d2efaa0633489b763b4cd1
+ARG DOOM1_WAD_SHA256=1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771
+RUN git clone https://github.com/maximevince/fbDOOM.git /build/fbdoom-src && \
+    cd /build/fbdoom-src && git checkout ${FBDOOM_COMMIT} && \
+    make -C fbdoom CROSS_COMPILE=riscv64-linux-musl- NOSDL=1 LDFLAGS=-static && \
+    cp fbdoom/fbdoom /build/initramfs/bin/fbdoom && \
+    file /build/initramfs/bin/fbdoom | grep -q 'statically linked'
+RUN wget -q -O /build/initramfs/doom1.wad https://distro.ibiblio.org/slitaz/sources/packages/d/doom1.wad && \
+    echo "${DOOM1_WAD_SHA256}  /build/initramfs/doom1.wad" | sha256sum -c - && \
+    printf '#!/bin/sh\nexec fbdoom -iwad /doom1.wad "$@"\n' > /build/initramfs/bin/doom && \
+    chmod +x /build/initramfs/bin/doom
+
+RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\nfile /bin/fbdoom /build/initramfs/bin/fbdoom 0755 0 0\nfile /bin/doom /build/initramfs/bin/doom 0755 0 0\nfile /doom1.wad /build/initramfs/doom1.wad 0644 0 0\n' >> /build/initramfs.list && \
     cd /build/linux-6.12 && \
     make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- olddefconfig && \
     make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc) Image && \
