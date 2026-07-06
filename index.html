@@ -169,13 +169,54 @@ function onKey(e) {
   e.preventDefault();
 }
 termEl.addEventListener('keydown', onKey);
-// Fullscreen screen: click the canvas; keystrokes keep flowing to the guest.
-fbCanvas.addEventListener('click', () => {
+
+// --- virtio-input: the canvas is a real keyboard + mouse for the guest ---
+// evdev key codes, from event.code names.
+const EV = (() => {
+  const m = { Escape: 1, Minus: 12, Equal: 13, Backspace: 14, Tab: 15, BracketLeft: 26,
+    BracketRight: 27, Enter: 28, ControlLeft: 29, Semicolon: 39, Quote: 40, Backquote: 41,
+    ShiftLeft: 42, Backslash: 43, Comma: 51, Period: 52, Slash: 53, ShiftRight: 54,
+    AltLeft: 56, Space: 57, CapsLock: 58, ControlRight: 97, AltRight: 100,
+    ArrowUp: 103, ArrowLeft: 105, ArrowRight: 106, ArrowDown: 108,
+    Home: 102, End: 107, PageUp: 104, PageDown: 109, Insert: 110, Delete: 111 };
+  '1234567890'.split('').forEach((d, i) => m['Digit' + d] = 2 + i);
+  'QWERTYUIOP'.split('').forEach((c, i) => m['Key' + c] = 16 + i);
+  'ASDFGHJKL'.split('').forEach((c, i) => m['Key' + c] = 30 + i);
+  'ZXCVBNM'.split('').forEach((c, i) => m['Key' + c] = 44 + i);
+  for (let i = 1; i <= 10; i++) m['F' + i] = 58 + i;
+  return m;
+})();
+const SYN = () => exports.input_event(0, 0, 0);
+// Keys route to the virtio keyboard while the canvas is fullscreen (games);
+// otherwise the terminal handler owns them.
+document.addEventListener('keydown', (e) => {
+  if (document.fullscreenElement !== fbCanvas) return;
+  if (e.repeat) { e.preventDefault(); return; }
+  const c = EV[e.code];
+  if (c) { exports.input_event(1, c, 1); SYN(); e.preventDefault(); }
+});
+document.addEventListener('keyup', (e) => {
+  if (document.fullscreenElement !== fbCanvas) return;
+  const c = EV[e.code];
+  if (c) { exports.input_event(1, c, 0); SYN(); e.preventDefault(); }
+});
+// Mouse: relative movement + buttons whenever the pointer is on the canvas.
+fbCanvas.addEventListener('mousemove', (e) => {
+  if (!exports || !exports.input_event) return;
+  const dx = e.movementX | 0, dy = e.movementY | 0;
+  if (dx) exports.input_event(2, 0, dx >>> 0);
+  if (dy) exports.input_event(2, 1, dy >>> 0);
+  if (dx || dy) SYN();
+});
+const BTN = { 0: 0x110, 1: 0x112, 2: 0x111 }; // left, middle, right
+fbCanvas.addEventListener('mousedown', (e) => { exports.input_event(1, BTN[e.button] || 0x110, 1); SYN(); });
+fbCanvas.addEventListener('mouseup', (e) => { exports.input_event(1, BTN[e.button] || 0x110, 0); SYN(); });
+fbCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Double-click for fullscreen (single click is a guest mouse click now).
+fbCanvas.addEventListener('dblclick', () => {
   if (document.fullscreenElement === fbCanvas) document.exitFullscreen();
   else if (fbCanvas.requestFullscreen) fbCanvas.requestFullscreen();
-});
-document.addEventListener('keydown', (e) => {
-  if (document.fullscreenElement === fbCanvas) onKey(e);
 });
 
 (async () => {
