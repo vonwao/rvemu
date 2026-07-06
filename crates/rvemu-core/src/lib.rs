@@ -12,5 +12,6 @@ pub mod plic;
 pub mod uart;
 pub mod trap;
 pub mod virtio;
+pub mod virtio_input;
 
 pub use platform::Platform;

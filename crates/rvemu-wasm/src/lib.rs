@@ -56,6 +56,7 @@ pub extern "C" fn boot(ram_mib: usize) -> i32 {
         let mut machine = machine::Machine::new(&loaded, ram_mib, &[]);
         machine.cpu.bus.enable_vram();
         machine.cpu.bus.enable_net();
+        machine.cpu.bus.enable_input();
         STATE.with(|s| {
             *s.borrow_mut() = Some(State {
                 machine,
@@ -173,6 +174,19 @@ pub extern "C" fn vram_len() -> usize {
 #[no_mangle]
 pub extern "C" fn mtime() -> u64 {
     STATE.with(|s| s.borrow().as_ref().map_or(0, |st| st.machine.cpu.bus.clint.mtime))
+}
+
+/// Queue one evdev event (keyboard/mouse) toward the virtio-input device.
+/// The page sends EV_SYN(0,0,0) itself after each batch.
+#[no_mangle]
+pub extern "C" fn input_event(etype: u32, code: u32, value: u32) {
+    STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            if let Some(inp) = st.machine.cpu.bus.input.as_mut() {
+                inp.push_event(etype as u16, code as u16, value);
+            }
+        }
+    });
 }
 
 // --- Network frame exchange (virtio-net <-> JS gateway) ---

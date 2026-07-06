@@ -6,16 +6,16 @@
 //! injects frames with `rx_push` and they are delivered into posted rx
 //! buffers on the next device tick.
 
-const MAGIC: u32 = 0x7472_6976; // "virt"
-const VERSION: u32 = 2;
+pub(crate) const MAGIC: u32 = 0x7472_6976; // "virt"
+pub(crate) const VERSION: u32 = 2;
 const DEVICE_ID_NET: u32 = 1;
-const VENDOR_ID: u32 = 0x726d_7665; // "rvem"
+pub(crate) const VENDOR_ID: u32 = 0x726d_7665; // "rvem"
 
-const VIRTIO_F_VERSION_1: u64 = 1 << 32;
+pub(crate) const VIRTIO_F_VERSION_1: u64 = 1 << 32;
 const VIRTIO_NET_F_MAC: u64 = 1 << 5;
 
-const DESC_F_NEXT: u16 = 1;
-const DESC_F_WRITE: u16 = 2;
+pub(crate) const DESC_F_NEXT: u16 = 1;
+pub(crate) const DESC_F_WRITE: u16 = 2;
 
 /// Fixed, documented MAC for the guest NIC.
 pub const GUEST_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
@@ -25,13 +25,13 @@ const VNET_HDR_LEN: usize = 12; // virtio_net_hdr_v1 (VERSION_1 layout)
 const MAX_FRAME: usize = 1600;
 
 #[derive(Default, Clone)]
-struct Queue {
-    ready: bool,
-    num: u32,
-    desc: u64,
-    driver: u64, // avail ring
-    device: u64, // used ring
-    last_avail: u16,
+pub(crate) struct Queue {
+    pub(crate) ready: bool,
+    pub(crate) num: u32,
+    pub(crate) desc: u64,
+    pub(crate) driver: u64, // avail ring
+    pub(crate) device: u64, // used ring
+    pub(crate) last_avail: u16,
 }
 
 pub struct VirtioNet {
@@ -344,43 +344,43 @@ impl Default for VirtioNet {
     }
 }
 
-fn set_lo(v: &mut u64, val: u32) {
+pub(crate) fn set_lo(v: &mut u64, val: u32) {
     *v = (*v & !0xffff_ffff) | val as u64;
 }
-fn set_hi(v: &mut u64, val: u32) {
+pub(crate) fn set_hi(v: &mut u64, val: u32) {
     *v = (*v & 0xffff_ffff) | ((val as u64) << 32);
 }
 
-fn ram_slice<'a>(ram: &'a [u8], base: u64, addr: u64, len: usize) -> Option<&'a [u8]> {
+pub(crate) fn ram_slice<'a>(ram: &'a [u8], base: u64, addr: u64, len: usize) -> Option<&'a [u8]> {
     let off = addr.checked_sub(base)? as usize;
     ram.get(off..off + len)
 }
-fn ram_slice_mut<'a>(ram: &'a mut [u8], base: u64, addr: u64, len: usize) -> Option<&'a mut [u8]> {
+pub(crate) fn ram_slice_mut<'a>(ram: &'a mut [u8], base: u64, addr: u64, len: usize) -> Option<&'a mut [u8]> {
     let off = addr.checked_sub(base)? as usize;
     ram.get_mut(off..off + len)
 }
-fn read_u16(ram: &[u8], base: u64, addr: u64) -> Option<u16> {
+pub(crate) fn read_u16(ram: &[u8], base: u64, addr: u64) -> Option<u16> {
     ram_slice(ram, base, addr, 2).map(|b| u16::from_le_bytes([b[0], b[1]]))
 }
-fn read_u32(ram: &[u8], base: u64, addr: u64) -> Option<u32> {
+pub(crate) fn read_u32(ram: &[u8], base: u64, addr: u64) -> Option<u32> {
     ram_slice(ram, base, addr, 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
 }
-fn read_u64(ram: &[u8], base: u64, addr: u64) -> Option<u64> {
+pub(crate) fn read_u64(ram: &[u8], base: u64, addr: u64) -> Option<u64> {
     ram_slice(ram, base, addr, 8).map(|b| u64::from_le_bytes(b.try_into().unwrap()))
 }
-fn write_u16(ram: &mut [u8], base: u64, addr: u64, v: u16) {
+pub(crate) fn write_u16(ram: &mut [u8], base: u64, addr: u64, v: u16) {
     if let Some(b) = ram_slice_mut(ram, base, addr, 2) {
         b.copy_from_slice(&v.to_le_bytes());
     }
 }
-fn write_u32(ram: &mut [u8], base: u64, addr: u64, v: u32) {
+pub(crate) fn write_u32(ram: &mut [u8], base: u64, addr: u64, v: u32) {
     if let Some(b) = ram_slice_mut(ram, base, addr, 4) {
         b.copy_from_slice(&v.to_le_bytes());
     }
 }
 
 /// Append one used-ring element and bump used.idx.
-fn push_used(ram: &mut [u8], base: u64, q: &Queue, head: u16, len: u32) {
+pub(crate) fn push_used(ram: &mut [u8], base: u64, q: &Queue, head: u16, len: u32) {
     let idx = read_u16(ram, base, q.device + 2).unwrap_or(0);
     let slot = (idx as u32 % q.num) as u64;
     let elem = q.device + 4 + 8 * slot;

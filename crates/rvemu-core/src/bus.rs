@@ -5,6 +5,7 @@ use crate::plic::Plic;
 use crate::trap::Exception;
 use crate::uart::Uart;
 use crate::virtio::VirtioNet;
+use crate::virtio_input::VirtioInput;
 
 pub const BOOT_ROM_BASE: u64 = 0x1000;
 pub const CLINT_BASE: u64 = 0x0200_0000;
@@ -23,6 +24,10 @@ pub const VRAM_SIZE: u64 = 0x10_0000; // 1 MiB: 800x600 @ rgb565
 pub const NET_BASE: u64 = 0x1000_1000;
 pub const NET_SIZE: u64 = 0x1000;
 pub const NET_IRQ: u32 = 2;
+/// Optional virtio-mmio input device (extras demo images only).
+pub const INPUT_BASE: u64 = 0x1000_2000;
+pub const INPUT_SIZE: u64 = 0x1000;
+pub const INPUT_IRQ: u32 = 3;
 
 pub const CLINT_MSIP: u64 = 0x0;
 pub const CLINT_MTIMECMP: u64 = 0x4000;
@@ -86,6 +91,8 @@ pub struct Bus {
     pub vram: Option<Vec<u8>>,
     /// Present only when enabled (extras images).
     pub net: Option<VirtioNet>,
+    /// Present only when enabled (extras images).
+    pub input: Option<VirtioInput>,
 }
 
 impl Bus {
@@ -99,6 +106,7 @@ impl Bus {
             input_queue: std::collections::VecDeque::new(),
             vram: None,
             net: None,
+            input: None,
         }
     }
 
@@ -108,6 +116,10 @@ impl Bus {
 
     pub fn enable_net(&mut self) {
         self.net = Some(VirtioNet::new());
+    }
+
+    pub fn enable_input(&mut self) {
+        self.input = Some(VirtioInput::new());
     }
 
     fn sync_uart_irq(&mut self) {
@@ -122,12 +134,19 @@ impl Bus {
         }
     }
 
+    fn sync_input_irq(&mut self) {
+        if let Some(input) = &self.input {
+            let lvl = input.irq_level();
+            self.plic.set_interrupt_level(INPUT_IRQ, lvl);
+        }
+    }
+
     /// Per-RTC-tick device work (mirrors Spike's device tick cadence).
     pub fn tick_devices(&mut self) {
         let q = &mut self.input_queue;
         self.uart.tick(|| q.pop_front());
         self.sync_uart_irq();
-        let Bus { ram, net, .. } = self;
+        let Bus { ram, net, input, .. } = self;
         if let Some(net) = net {
             net.dbg_ticks += 1;
             if net.has_rx_pending() {
@@ -135,7 +154,13 @@ impl Bus {
                 net.process(ram, RAM_BASE);
             }
         }
+        if let Some(input) = input {
+            if input.has_pending() {
+                input.process(ram, RAM_BASE);
+            }
+        }
         self.sync_net_irq();
+        self.sync_input_irq();
     }
 
     /// Install the reset ROM image at 0x1000 (Spike-compatible: 5
@@ -195,6 +220,13 @@ impl Bus {
                 .unwrap()
                 .load(paddr - NET_BASE, size)
                 .map_err(|_| Exception::LoadAccessFault(paddr));
+        } else if self.input.is_some() && (INPUT_BASE..INPUT_BASE + INPUT_SIZE).contains(&paddr) {
+            return self
+                .input
+                .as_mut()
+                .unwrap()
+                .load(paddr - INPUT_BASE, size)
+                .map_err(|_| Exception::LoadAccessFault(paddr));
         }
         Err(Exception::LoadAccessFault(paddr))
     }
@@ -239,6 +271,19 @@ impl Bus {
                 net.as_mut().unwrap().process(ram, RAM_BASE);
             }
             self.sync_net_irq();
+            return Ok(());
+        } else if self.input.is_some() && (INPUT_BASE..INPUT_BASE + INPUT_SIZE).contains(&paddr) {
+            let notify = self
+                .input
+                .as_mut()
+                .unwrap()
+                .store(paddr - INPUT_BASE, val, size)
+                .map_err(|_| Exception::StoreAccessFault(paddr))?;
+            if notify {
+                let Bus { ram, input, .. } = self;
+                input.as_mut().unwrap().process(ram, RAM_BASE);
+            }
+            self.sync_input_irq();
             return Ok(());
         }
         Err(Exception::StoreAccessFault(paddr))
