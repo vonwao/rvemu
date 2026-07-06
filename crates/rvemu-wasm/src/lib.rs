@@ -213,6 +213,30 @@ pub extern "C" fn net_tx_clear() {
     });
 }
 
+/// Device state dump for debugging: fills the rx staging buffer with a
+/// printable line, returns its length.
+#[no_mangle]
+pub extern "C" fn net_debug() -> usize {
+    STATE.with(|s| {
+        let s = s.borrow();
+        let Some(st) = s.as_ref() else { return 0 };
+        let Some(n) = st.machine.cpu.bus.net.as_ref() else { return 0 };
+        let line = n.debug_line(&st.machine.cpu.bus.ram, 0x8000_0000);
+        NET_RX_BUF.with(|b| {
+            let mut b = b.borrow_mut();
+            b.clear();
+            b.extend_from_slice(line.as_bytes());
+            b.len()
+        })
+    })
+}
+
+/// Pointer to the rx staging buffer (also holds net_debug output).
+#[no_mangle]
+pub extern "C" fn net_rx_ptr() -> *const u8 {
+    NET_RX_BUF.with(|b| b.borrow().as_ptr())
+}
+
 /// Reserve space for one host->guest frame; JS writes bytes then calls
 /// net_rx_push().
 #[no_mangle]

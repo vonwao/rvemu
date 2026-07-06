@@ -129,7 +129,9 @@ impl Bus {
         self.sync_uart_irq();
         let Bus { ram, net, .. } = self;
         if let Some(net) = net {
+            net.dbg_ticks += 1;
             if net.has_rx_pending() {
+                net.dbg_tick_pending += 1;
                 net.process(ram, RAM_BASE);
             }
         }

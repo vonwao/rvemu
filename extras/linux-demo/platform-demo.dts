@@ -73,6 +73,13 @@
 			interrupt-controller;
 		};
 
+		virtio_mmio@10001000 {
+			compatible = "virtio,mmio";
+			reg = <0x0 0x10001000 0x0 0x1000>;
+			interrupt-parent = <&plic>;
+			interrupts = <2>;
+		};
+
 		uart@10000000 {
 			compatible = "ns16550a";
 			clock-frequency = <10000000>;

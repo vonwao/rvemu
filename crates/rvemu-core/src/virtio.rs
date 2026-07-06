@@ -47,6 +47,12 @@ pub struct VirtioNet {
     pub tx_frames: Vec<u8>,
     /// Frames from the host awaiting free guest rx buffers.
     rx_pending: std::collections::VecDeque<Vec<u8>>,
+    // Diagnostics (debug_line).
+    dbg_rx_calls: u64,
+    dbg_rx_delivered: u64,
+    dbg_rx_break: u64,
+    pub dbg_ticks: u64,
+    pub dbg_tick_pending: u64,
 }
 
 impl VirtioNet {
@@ -61,6 +67,11 @@ impl VirtioNet {
             interrupt_status: 0,
             tx_frames: Vec::new(),
             rx_pending: std::collections::VecDeque::new(),
+            dbg_rx_calls: 0,
+            dbg_rx_delivered: 0,
+            dbg_rx_break: 0,
+            dbg_ticks: 0,
+            dbg_tick_pending: 0,
         }
     }
 
@@ -77,6 +88,33 @@ impl VirtioNet {
 
     pub fn has_rx_pending(&self) -> bool {
         !self.rx_pending.is_empty()
+    }
+
+    /// One-line state dump for the wasm debug export.
+    pub fn debug_line(&self, ram: &[u8], ram_base: u64) -> String {
+        let q = |i: usize| {
+            let q = &self.queues[i];
+            let avail = read_u16(ram, ram_base, q.driver + 2).map_or(-1i32, |v| v as i32);
+            let used = read_u16(ram, ram_base, q.device + 2).map_or(-1i32, |v| v as i32);
+            format!(
+                "q{i}[ready={} num={} desc={:#x} last_avail={} avail_idx={} used_idx={}]",
+                q.ready, q.num, q.desc, q.last_avail, avail, used
+            )
+        };
+        format!(
+            "status={:#x} isr={:#x} feat={:#x} rx_pending={} rx_calls={} rx_delivered={} rx_break={} ticks={} tick_pending={} {} {}",
+            self.status,
+            self.interrupt_status,
+            self.driver_features,
+            self.rx_pending.len(),
+            self.dbg_rx_calls,
+            self.dbg_rx_delivered,
+            self.dbg_rx_break,
+            self.dbg_ticks,
+            self.dbg_tick_pending,
+            q(0),
+            q(1)
+        )
     }
 
     fn device_features(&self) -> u64 {
@@ -231,6 +269,7 @@ impl VirtioNet {
     }
 
     fn process_rx(&mut self, ram: &mut [u8], ram_base: u64) {
+        self.dbg_rx_calls += 1;
         let q = self.queues[0].clone();
         if !q.ready || q.num == 0 {
             return;
@@ -240,9 +279,13 @@ impl VirtioNet {
         while let Some(frame) = self.rx_pending.front() {
             let avail_idx = match read_u16(ram, ram_base, q.driver + 2) {
                 Some(v) => v,
-                None => break,
+                None => {
+                    self.dbg_rx_break = 1;
+                    break;
+                }
             };
             if last == avail_idx {
+                self.dbg_rx_break = 2;
                 break; // no free buffers; retry on a later tick
             }
             let slot = (last as u32 % q.num) as u64;
@@ -286,6 +329,7 @@ impl VirtioNet {
             self.rx_pending.pop_front();
             last = last.wrapping_add(1);
             used = true;
+            self.dbg_rx_delivered += 1;
         }
         self.queues[0].last_avail = last;
         if used {
@@ -343,4 +387,114 @@ fn push_used(ram: &mut [u8], base: u64, q: &Queue, head: u16, len: u32) {
     write_u32(ram, base, elem, head as u32);
     write_u32(ram, base, elem + 4, len);
     write_u16(ram, base, q.device + 2, idx.wrapping_add(1));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BASE: u64 = 0x8000_0000;
+    const DESC: u64 = BASE + 0x1000;
+    const AVAIL: u64 = BASE + 0x2000;
+    const USED: u64 = BASE + 0x3000;
+    const BUF: u64 = BASE + 0x4000;
+
+    fn setup(qsel: u32) -> (VirtioNet, Vec<u8>) {
+        let mut d = VirtioNet::new();
+        let ram = vec![0u8; 0x10000];
+        d.store(0x70, 0x0f, 4).unwrap(); // ACK|DRIVER|DRIVER_OK|FEATURES_OK
+        d.store(0x30, qsel as u64, 4).unwrap();
+        d.store(0x38, 4, 4).unwrap(); // queue size 4
+        d.store(0x80, DESC & 0xffff_ffff, 4).unwrap();
+        d.store(0x84, DESC >> 32, 4).unwrap();
+        d.store(0x90, AVAIL & 0xffff_ffff, 4).unwrap();
+        d.store(0x94, AVAIL >> 32, 4).unwrap();
+        d.store(0xa0, USED & 0xffff_ffff, 4).unwrap();
+        d.store(0xa4, USED >> 32, 4).unwrap();
+        d.store(0x44, 1, 4).unwrap(); // ready
+        (d, ram)
+    }
+
+    fn wr_desc(ram: &mut [u8], i: u64, addr: u64, len: u32, flags: u16, next: u16) {
+        let off = (DESC - BASE + 16 * i) as usize;
+        ram[off..off + 8].copy_from_slice(&addr.to_le_bytes());
+        ram[off + 8..off + 12].copy_from_slice(&len.to_le_bytes());
+        ram[off + 12..off + 14].copy_from_slice(&flags.to_le_bytes());
+        ram[off + 14..off + 16].copy_from_slice(&next.to_le_bytes());
+    }
+
+    fn set_avail(ram: &mut [u8], idx: u16, ring: &[u16]) {
+        let off = (AVAIL - BASE) as usize;
+        ram[off + 2..off + 4].copy_from_slice(&idx.to_le_bytes());
+        for (i, h) in ring.iter().enumerate() {
+            ram[off + 4 + 2 * i..off + 6 + 2 * i].copy_from_slice(&h.to_le_bytes());
+        }
+    }
+
+    fn used_idx(ram: &[u8]) -> u16 {
+        read_u16(ram, BASE, USED + 2).unwrap()
+    }
+
+    #[test]
+    fn rx_delivery_two_desc_chain() {
+        let (mut d, mut ram) = setup(0);
+        // Kernel-style small rx buffer: hdr desc chained to data desc.
+        wr_desc(&mut ram, 0, BUF, VNET_HDR_LEN as u32, DESC_F_WRITE | DESC_F_NEXT, 1);
+        wr_desc(&mut ram, 1, BUF + VNET_HDR_LEN as u64, 2048, DESC_F_WRITE, 0);
+        set_avail(&mut ram, 1, &[0]);
+        d.rx_push(&[0xaa; 60]);
+        d.process(&mut ram, BASE);
+        assert_eq!(used_idx(&ram), 1, "used ring advanced");
+        let len = read_u32(&ram, BASE, USED + 4 + 4).unwrap();
+        assert_eq!(len as usize, VNET_HDR_LEN + 60, "written length");
+        let hdr = ram_slice(&ram, BASE, BUF, VNET_HDR_LEN).unwrap();
+        assert_eq!(hdr[10], 1, "num_buffers = 1");
+        let body = ram_slice(&ram, BASE, BUF + VNET_HDR_LEN as u64, 60).unwrap();
+        assert!(body.iter().all(|&b| b == 0xaa), "frame bytes in place");
+        assert!(d.irq_level(), "interrupt asserted");
+    }
+
+    #[test]
+    fn rx_single_desc_buffer() {
+        let (mut d, mut ram) = setup(0);
+        wr_desc(&mut ram, 0, BUF, 2048, DESC_F_WRITE, 0);
+        set_avail(&mut ram, 1, &[0]);
+        d.rx_push(&[0x55; 100]);
+        d.process(&mut ram, BASE);
+        assert_eq!(used_idx(&ram), 1);
+        let len = read_u32(&ram, BASE, USED + 4 + 4).unwrap();
+        assert_eq!(len as usize, VNET_HDR_LEN + 100);
+    }
+
+    #[test]
+    fn rx_waits_for_buffers() {
+        let (mut d, mut ram) = setup(0);
+        d.rx_push(&[0xaa; 60]);
+        d.process(&mut ram, BASE); // no avail buffers yet
+        assert_eq!(used_idx(&ram), 0);
+        assert!(d.has_rx_pending());
+        wr_desc(&mut ram, 0, BUF, 2048, DESC_F_WRITE, 0);
+        set_avail(&mut ram, 1, &[0]);
+        d.process(&mut ram, BASE);
+        assert_eq!(used_idx(&ram), 1);
+        assert!(!d.has_rx_pending());
+    }
+
+    #[test]
+    fn tx_collects_frame() {
+        let (mut d, mut ram) = setup(1);
+        // hdr+frame in one read-only descriptor.
+        let frame = [0x11u8; 42];
+        let mut payload = vec![0u8; VNET_HDR_LEN];
+        payload.extend_from_slice(&frame);
+        let off = (BUF - BASE) as usize;
+        ram[off..off + payload.len()].copy_from_slice(&payload);
+        wr_desc(&mut ram, 0, BUF, payload.len() as u32, 0, 0);
+        set_avail(&mut ram, 1, &[0]);
+        d.process(&mut ram, BASE);
+        assert_eq!(used_idx(&ram), 1);
+        assert_eq!(d.tx_frames.len(), 2 + 42);
+        assert_eq!(u16::from_le_bytes([d.tx_frames[0], d.tx_frames[1]]), 42);
+        assert!(d.tx_frames[2..].iter().all(|&b| b == 0x11));
+    }
 }

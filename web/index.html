@@ -24,6 +24,7 @@
 <canvas id="fb" width="800" height="600" style="display:none; background:#000; border-radius:6px; margin-bottom:10px; max-width:100%;"></canvas>
 <div id="term" tabindex="0"></div>
 <script src="term.js"></script>
+<script src="net.js"></script>
 <script>
 const termEl = document.getElementById('term');
 const status = document.getElementById('status');
@@ -62,6 +63,22 @@ function drain() {
   }
 }
 
+// Network: guest frames (length-prefixed) go to the JS gateway; gateway
+// replies are injected back into the virtio NIC's rx queue.
+let gateway;
+function drainNet() {
+  const n = Number(exports.net_tx_len());
+  if (!n) return;
+  const buf = new Uint8Array(exports.memory.buffer, Number(exports.net_tx_ptr()), n).slice();
+  exports.net_tx_clear();
+  let i = 0;
+  while (i + 2 <= buf.length) {
+    const len = buf[i] | (buf[i + 1] << 8);
+    gateway.onFrame(buf.subarray(i + 2, i + 2 + len));
+    i += 2 + len;
+  }
+}
+
 // Adaptive chunking: keystrokes reach the emulator only between run()
 // calls, so each call targets ~40ms of wall time for responsive input.
 // Time pacing: the guest RTC (10MHz) must not run ahead of wall time, or
@@ -79,6 +96,7 @@ function pump() {
   if (dt < 25 && chunk < 100000000n) chunk *= 2n;
   else if (dt > 70 && chunk > 250000n) chunk /= 2n;
   drain();
+  drainNet();
   blitFb();
   // Windowed speed: instructions retired over the last ~500ms of wall time,
   // so an idle (paced) guest reads "idle" instead of a decaying average.
@@ -161,6 +179,11 @@ termEl.addEventListener('keydown', (e) => {
   const ptr = exports.image_alloc(image.byteLength);
   new Uint8Array(exports.memory.buffer, ptr, image.byteLength).set(new Uint8Array(image));
   if (exports.boot(256) !== 0) { status.textContent = 'ELF load failed'; return; }
+  gateway = new NetGateway((frame) => {
+    const p = Number(exports.net_rx_alloc(frame.length));
+    new Uint8Array(exports.memory.buffer, p, frame.length).set(frame);
+    exports.net_rx_push();
+  }, (url, opts) => fetch(url, opts));
   render();
   termEl.focus();
   t0 = performance.now();

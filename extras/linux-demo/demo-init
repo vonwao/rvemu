@@ -3,5 +3,15 @@
 mount -t proc none /proc
 mount -t sysfs none /sys
 mount -t devtmpfs devtmpfs /dev
+# Static network config matching the JS gateway (no DHCP needed): guest
+# 10.0.2.15, gateway 10.0.2.2, DNS 10.0.2.3. Quietly skipped when the image
+# runs on a platform without the virtio NIC.
+ifconfig lo 127.0.0.1 up 2>/dev/null
+if ifconfig eth0 10.0.2.15 netmask 255.255.255.0 up 2>/dev/null; then
+  route add default gw 10.0.2.2
+  mkdir -p /etc
+  echo 'nameserver 10.0.2.3' > /etc/resolv.conf
+  echo "initramfs: eth0 up (10.0.2.15)"
+fi
 echo "initramfs: init complete"
 exec setsid sh -c 'stty rows 24 cols 80 </dev/ttyS0; exec sh </dev/ttyS0 >/dev/ttyS0 2>&1'

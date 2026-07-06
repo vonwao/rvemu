@@ -26,6 +26,13 @@ RUN dtc -I dts -O dtb -o /build/platform-demo.dtb /build/platform-demo.dts && \
       --enable CONFIG_FB_DEVICE \
       --disable CONFIG_FRAMEBUFFER_CONSOLE --disable CONFIG_LOGO
 
+# Networking: virtio-mmio NIC bridged to the page's JS gateway (extras only;
+# the certified base image has CONFIG_NET disabled per the charter).
+RUN cd /build/linux-6.12 && \
+    scripts/config --enable CONFIG_NET --enable CONFIG_INET --enable CONFIG_UNIX \
+      --enable CONFIG_PACKET --enable CONFIG_NETDEVICES --enable CONFIG_NET_CORE \
+      --enable CONFIG_VIRTIO_MENU --enable CONFIG_VIRTIO_MMIO --enable CONFIG_VIRTIO_NET
+
 RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\n' >> /build/initramfs.list && \
     cd /build/linux-6.12 && \
     make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- olddefconfig && \
