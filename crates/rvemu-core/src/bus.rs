@@ -14,6 +14,10 @@ pub const UART_BASE: u64 = 0x1000_0000;
 pub const UART_SIZE: u64 = 0x100;
 pub const UART_IRQ: u32 = 1;
 pub const RAM_BASE: u64 = 0x8000_0000;
+/// Optional linear framebuffer (extras demo images only; not part of the
+/// certified platform — enable via `enable_vram`).
+pub const VRAM_BASE: u64 = 0x9000_0000;
+pub const VRAM_SIZE: u64 = 0x10_0000; // 1 MiB: 800x600 @ rgb565
 
 pub const CLINT_MSIP: u64 = 0x0;
 pub const CLINT_MTIMECMP: u64 = 0x4000;
@@ -73,6 +77,8 @@ pub struct Bus {
     /// Host console input staged by the platform layer; the UART pulls from
     /// it one byte per RTC tick (with Spike's backoff).
     pub input_queue: std::collections::VecDeque<u8>,
+    /// Present only when enabled (extras images).
+    pub vram: Option<Vec<u8>>,
 }
 
 impl Bus {
@@ -84,7 +90,12 @@ impl Bus {
             plic: Plic::new(),
             uart: Uart::new(),
             input_queue: std::collections::VecDeque::new(),
+            vram: None,
         }
+    }
+
+    pub fn enable_vram(&mut self) {
+        self.vram = Some(vec![0; VRAM_SIZE as usize]);
     }
 
     fn sync_uart_irq(&mut self) {
@@ -112,6 +123,19 @@ impl Bus {
 
     /// Physical load. `size` in bytes (1/2/4/8). Returns zero-extended value.
     pub fn load(&mut self, paddr: u64, size: u64) -> Result<u64, Exception> {
+        if let Some(v) = &self.vram {
+            if (VRAM_BASE..VRAM_BASE + VRAM_SIZE).contains(&paddr) {
+                let off = (paddr - VRAM_BASE) as usize;
+                if off + size as usize <= v.len() {
+                    let mut r = 0u64;
+                    for i in 0..size as usize {
+                        r |= (v[off + i] as u64) << (8 * i);
+                    }
+                    return Ok(r);
+                }
+                return Err(Exception::LoadAccessFault(paddr));
+            }
+        }
         if paddr >= RAM_BASE {
             let off = (paddr - RAM_BASE) as usize;
             if off + size as usize <= self.ram.len() {
@@ -141,6 +165,17 @@ impl Bus {
     }
 
     pub fn store(&mut self, paddr: u64, val: u64, size: u64) -> Result<(), Exception> {
+        if self.vram.is_some() && (VRAM_BASE..VRAM_BASE + VRAM_SIZE).contains(&paddr) {
+            let v = self.vram.as_mut().unwrap();
+            let off = (paddr - VRAM_BASE) as usize;
+            if off + size as usize <= v.len() {
+                for i in 0..size as usize {
+                    v[off + i] = (val >> (8 * i)) as u8;
+                }
+                return Ok(());
+            }
+            return Err(Exception::StoreAccessFault(paddr));
+        }
         if paddr >= RAM_BASE {
             let off = (paddr - RAM_BASE) as usize;
             if off + size as usize <= self.ram.len() {

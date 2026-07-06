@@ -53,7 +53,8 @@ pub extern "C" fn boot(ram_mib: usize) -> i32 {
             Ok(l) => l,
             Err(_) => return 1,
         };
-        let machine = machine::Machine::new(&loaded, ram_mib, &[]);
+        let mut machine = machine::Machine::new(&loaded, ram_mib, &[]);
+        machine.cpu.bus.enable_vram();
         STATE.with(|s| {
             *s.borrow_mut() = Some(State {
                 machine,
@@ -79,6 +80,25 @@ pub extern "C" fn run(steps: u64) -> i32 {
             return 1;
         }
         match st.machine.run(steps, &mut st.platform, |_| {}) {
+            machine::RunExit::Tohost(_) => {
+                st.done = true;
+                1
+            }
+            machine::RunExit::Budget => 0,
+        }
+    })
+}
+
+/// Run with a guest-time ceiling (see Machine::run_paced).
+#[no_mangle]
+pub extern "C" fn run_paced(steps: u64, max_mtime: u64) -> i32 {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let Some(st) = s.as_mut() else { return -1 };
+        if st.done {
+            return 1;
+        }
+        match st.machine.run_paced(steps, max_mtime, &mut st.platform, |_| {}) {
             machine::RunExit::Tohost(_) => {
                 st.done = true;
                 1
@@ -128,6 +148,23 @@ pub extern "C" fn console_out_clear() {
 #[no_mangle]
 pub extern "C" fn retired() -> u64 {
     STATE.with(|s| s.borrow().as_ref().map_or(0, |st| st.machine.cpu.retired))
+}
+
+/// Framebuffer access for the page's canvas blit (800x600 rgb565).
+#[no_mangle]
+pub extern "C" fn vram_ptr() -> *const u8 {
+    STATE.with(|s| {
+        s.borrow().as_ref().map_or(std::ptr::null(), |st| {
+            st.machine.cpu.bus.vram.as_ref().map_or(std::ptr::null(), |v| v.as_ptr())
+        })
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vram_len() -> usize {
+    STATE.with(|s| {
+        s.borrow().as_ref().map_or(0, |st| st.machine.cpu.bus.vram.as_ref().map_or(0, |v| v.len()))
+    })
 }
 
 /// Guest RTC (CLINT mtime, 10MHz timebase). Read-only; lets the page pace

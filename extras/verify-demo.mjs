@@ -31,7 +31,8 @@ function runPaced(pred, ms) {
   const wall0 = Date.now(), m0 = Number(e.mtime());
   const dl = Date.now() + ms;
   while (Date.now() < dl) {
-    e.run(1000000n); drain();
+    const ceil = BigInt(m0) + BigInt((Date.now() - wall0 + 50) * 10000);
+    e.run_paced(2000000n, ceil); drain();
     if (pred()) return true;
     const ahead = (Number(e.mtime()) - m0) / 10000 - (Date.now() - wall0);
     if (ahead > 5) sleepMs(Math.min(ahead, 100));
@@ -57,6 +58,16 @@ console.log(inGame ? 'TETRIS-RUNNING-FULLSCREEN' : 'TETRIS-NOT-RUNNING');
 send('q');
 const back = runPaced(() => screen.toText().split('\n').some(l => l.includes('~ #')), 20000);
 console.log(back ? 'QUIT-TO-PROMPT-OK' : 'QUIT-FAIL');
-const ok = inGame && back;
+// Framebuffer: the kernel logo + fbcon must have drawn real pixels.
+const vlen = Number(e.vram_len());
+let nonzero = 0;
+if (vlen) {
+  const vram = new Uint8Array(e.memory.buffer, Number(e.vram_ptr()), vlen);
+  for (let i = 0; i < vlen; i++) if (vram[i] !== 0) nonzero++;
+}
+const fbOk = nonzero > 10000;
+console.log(`FB nonzero bytes: ${nonzero}`);
+console.log(fbOk ? 'FB-PIXELS-OK' : 'FB-BLANK');
+const ok = inGame && back && fbOk;
 console.log(ok ? 'DEMO-VERIFIED' : 'DEMO-FAIL');
 process.exit(ok ? 0 : 1);

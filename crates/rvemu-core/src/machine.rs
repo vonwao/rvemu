@@ -64,13 +64,26 @@ impl Machine {
         &mut self,
         max_insns: u64,
         platform: &mut dyn Platform,
+        on_trace: impl FnMut(&str),
+    ) -> RunExit {
+        self.run_paced(max_insns, u64::MAX, platform, on_trace)
+    }
+
+    /// Like `run`, but also stops once the guest RTC reaches `max_mtime`.
+    /// This is how the browser page paces guest time to wall time: WFI
+    /// fast-forwarding otherwise skips whole timing waits inside one call.
+    pub fn run_paced(
+        &mut self,
+        max_insns: u64,
+        max_mtime: u64,
+        platform: &mut dyn Platform,
         mut on_trace: impl FnMut(&str),
     ) -> RunExit {
         // The budget bounds steps (attempted instructions), not retirements:
         // a trap loop retires nothing but must still terminate, matching
         // Spike's --instructions semantics.
         let mut steps: u64 = 0;
-        while steps < max_insns {
+        while steps < max_insns && self.cpu.bus.clint.mtime < max_mtime {
             steps += 1;
             // Console plumbing every RTC-tick-ish interval: cheap check.
             if steps % 128 == 0 {
@@ -95,7 +108,7 @@ impl Machine {
                     // budget guard avoids spinning forever with interrupts
                     // disabled or masked.
                     let mut guard = 0u64;
-                    while !self.cpu.has_pending_interrupt() {
+                    while !self.cpu.has_pending_interrupt() && self.cpu.bus.clint.mtime < max_mtime {
                         self.cpu.idle_slice();
                         guard += 1;
                         if guard % 64 == 0 {

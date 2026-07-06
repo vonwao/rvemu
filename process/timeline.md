@@ -49,3 +49,10 @@ Dated, ordered, descriptive. Pass/fail claims are only restated here after the h
 - **linux-demo image**: Docker layer on the pinned base — Micro Tetris (troglobit/tetris `aafa95e`) static rv64imac/musl, tty size set at init (serial consoles report 0×0; Tetris refused to start until `stty rows 24 cols 80`).
 - **Verification** (`extras/verify-demo.mjs`, paced like the page): boot → prompt → binary present → Tetris running fullscreen mid-game → `q` back to prompt — **DEMO-VERIFIED**.
 - Published: gh-pages now serves the pacing page + demo image; served ELF sha256 matches the locally verified build (`ffbfa918…`).
+
+## 2026-07-05 — Extras step 2: framebuffer + real pacing, live
+
+- **Pacing root-caused properly**: page-side sleeps couldn't work — one wasm call fast-forwards through many WFI waits internally, so whole gravity intervals passed inside a single call (operator confirmed Tetris unplayably fast; the unpaced verifier had shown the same signature — instant game-over). Fix moved the cap inside the run loop: `run_paced(steps, max_mtime)` stops when the guest RTC hits a wall-time-derived ceiling; the WFI idle loop honors it too. CLI/certified paths unchanged (`run` = ceiling `u64::MAX`).
+- **Framebuffer**: opt-in 1MiB VRAM at 0x90000000 (not part of the certified platform), 800x600 rgb565 `simple-framebuffer` node + fbcon + boot logo in the demo image (kernel config additions in the extras layer only); page blits to a canvas that appears at first pixel.
+- **Verification** `DEMO-VERIFIED`: prompt → tetris fullscreen after 4 *paced* seconds (game now runs at human speed) → clean quit → **FB-PIXELS-OK (88,372 nonzero bytes: Tux + console on the canvas)**. Regression battery on the changed tree: riscv-tests 106/108, both frozen boot layers BOOT-OK, lockstep spot-run prefix-clean.
+- Published to gh-pages.
