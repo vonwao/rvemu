@@ -21,6 +21,7 @@
 <body>
 <h1>rvemu — RISC-V rv64imac emulator, booting Linux 6.12 + BusyBox</h1>
 <div id="status">loading…</div>
+<canvas id="fb" width="800" height="600" style="display:none; background:#000; border-radius:6px; margin-bottom:10px; max-width:100%;"></canvas>
 <div id="term" tabindex="0"></div>
 <script src="term.js"></script>
 <script>
@@ -70,23 +71,55 @@ let chunk = 2000000n;
 let mtime0 = 0, wall0 = 0;
 function pump() {
   const t = performance.now();
-  const halted = exports.run(chunk) === 1;
+  // Guest-time ceiling: wall elapsed + 50ms slack, in 10MHz ticks.
+  const ceil = BigInt(mtime0) + BigInt(Math.floor((performance.now() - wall0 + 50) * 10000));
+  const halted = exports.run_paced(chunk, ceil) === 1;
   const dt = performance.now() - t;
   if (dt < 25 && chunk < 100000000n) chunk *= 2n;
   else if (dt > 70 && chunk > 250000n) chunk /= 2n;
   drain();
+  blitFb();
   const mips = (Number(exports.retired()) / 1e6 / ((performance.now() - t0) / 1000)).toFixed(0);
   const guestMs = (Number(exports.mtime()) - mtime0) / 10000; // 10MHz -> ms
   const wallMs = performance.now() - wall0;
   let ahead = guestMs - wallMs;
-  if (ahead < -2000) { // cap catch-up credit after CPU-bound phases
+  // If the guest fell behind wall time (CPU-bound phase), rebase so it never
+  // banks catch-up credit; run_paced's ceiling handles the ahead side.
+  if (ahead < 0) {
     wall0 = performance.now();
-    mtime0 = Number(exports.mtime()) + 2000 * 10000;
-    ahead = -2000;
+    mtime0 = Number(exports.mtime());
+    ahead = 0;
   }
   status.textContent = `retired: ${exports.retired().toLocaleString()} instructions · ${mips} MIPS · ` +
                        (halted ? 'halted' : 'running — click the terminal and type when the prompt appears');
   if (!halted) setTimeout(pump, ahead > 5 ? Math.min(ahead, 250) : 0);
+}
+
+// Framebuffer blit: 800x600 rgb565 -> canvas, ~10fps, shown once the guest
+// draws its first pixel (the kernel boot logo).
+const fbCanvas = document.getElementById('fb');
+const fbCtx = fbCanvas.getContext('2d');
+const fbImage = fbCtx.createImageData(800, 600);
+let fbVisible = false, lastBlit = 0;
+function blitFb() {
+  const now = performance.now();
+  if (now - lastBlit < 100) return;
+  lastBlit = now;
+  const len = Number(exports.vram_len());
+  if (!len) return;
+  const vram = new Uint8Array(exports.memory.buffer, Number(exports.vram_ptr()), len);
+  const px = fbImage.data;
+  let any = false;
+  for (let i = 0, j = 0; i < 800 * 600 * 2; i += 2, j += 4) {
+    const v = vram[i] | (vram[i + 1] << 8);
+    if (v) any = true;
+    px[j] = (v >> 8) & 0xf8;
+    px[j + 1] = (v >> 3) & 0xfc;
+    px[j + 2] = (v << 3) & 0xf8;
+    px[j + 3] = 255;
+  }
+  if (any && !fbVisible) { fbVisible = true; fbCanvas.style.display = 'block'; }
+  if (fbVisible) fbCtx.putImageData(fbImage, 0, 0);
 }
 
 const send = s => { for (const ch of s) exports.console_in(ch.charCodeAt(0)); };
