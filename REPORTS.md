@@ -128,3 +128,9 @@ virtio-input (evdev keyboard/mouse for the demo page) added behind opt-in `enabl
 ## 2026-07-06 — Extras image change (curl in demo userland)
 
 curl 8.10.1 (pinned sha256) added to the demo image as a static musl binary, HTTP-only (`--without-ssl` — the page gateway terminates TLS; guest port 80 → real `fetch()`). No emulator code changed — image-only, certified targets/harness untouched. Verification on the rebuilt image: **NET-VERIFIED** with new **CURL-STUB-OK / CURL-STUB-LENGTH-OK** checks (hermetic stubbed download, exact 40,023-byte length match) plus the live README fetch; **DEMO-VERIFIED** and **DOOM-VERIFIED** re-run green on the new artifact (DOOM frame metrics identical to the v5 certification). Build fix worth recording: libtool swallows plain `-static`; the final link needs libtool's `-all-static` (first attempt produced a dynamic binary, caught by the layer's static-link assertion).
+
+---
+
+## 2026-07-06 — Extras-change certification (links2 + curl, userland only)
+
+The graphical browser (links2 2.30 on the framebuffer, with pinned zlib/libpng/gpm) and curl 8.10.1 were added to the demo image. These are userland additions only: `git diff` over `crates/` is empty since the virtio-input commit (73ba0b7), so the emulator core binary is unchanged and the input build's **RISCOF 136/136** and bounded-lockstep **PREFIX-CLEAN** certification carries without re-running. Re-run on this image: unit tests 5/5, riscv-tests 106/108 (reference-identical ma_data pair only), xv6 + Linux frozen boot layers **BOOT-OK**, **DEMO-VERIFIED**, **DOOM-VERIFIED**, **NET-VERIFIED** (incl. curl arm + live README fetch), **LINKS-VERIFIED** (page fetched through the JS gateway and rendered to the framebuffer: 928,437 nonzero bytes). Charter non-goal "no networking" remains honored on every certified path; the NIC/input/fb devices are opt-in and wasm-only.
