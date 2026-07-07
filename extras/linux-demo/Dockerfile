@@ -109,11 +109,14 @@ RUN cd /build && wget -q -O curl.tgz ${CURL_URL} && \
     echo "${CURL_SHA256}  curl.tgz" | sha256sum -c - && \
     tar xzf curl.tgz && cd curl-8.10.1 && \
     CC=riscv64-linux-musl-gcc CPPFLAGS=-I/opt/sysroot/include \
-      LDFLAGS="-static -L/opt/sysroot/lib" \
+      LDFLAGS="-L/opt/sysroot/lib" \
       ./configure --host=riscv64-linux-musl --disable-shared --enable-static \
       --without-ssl --without-libpsl --with-zlib=/opt/sysroot \
       --disable-manual --disable-ldap && \
-    make -j$(nproc) -C lib && make -j$(nproc) -C src && \
+    make -j$(nproc) -C lib && \
+    # libtool swallows a plain -static (never reaches the compiler); its
+    # -all-static is what forces a fully static final link.
+    make -j$(nproc) -C src LDFLAGS="-all-static -L/opt/sysroot/lib" && \
     cp src/curl /build/initramfs/bin/curl && \
     file /build/initramfs/bin/curl | grep -q 'statically linked'
 
