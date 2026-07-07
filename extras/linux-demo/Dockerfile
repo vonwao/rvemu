@@ -64,7 +64,7 @@ COPY gpm-1.20.7.tar.gz /build/gpm.tgz
 
 # gpm: links2's fb driver requires libgpm at build time and the gpm daemon
 # at runtime for the mouse (kernel mousedev -> gpm -> links).
-RUN apt-get update -q && apt-get install -y -q autoconf automake && \
+RUN apt-get update -q && apt-get install -y -q autoconf automake libtool && \
     cd /build && tar xzf gpm.tgz && cd gpm-1.20.7 && \
     ./autogen.sh && \
     CC=riscv64-linux-musl-gcc LDFLAGS=-static \
