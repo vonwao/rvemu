@@ -67,11 +67,11 @@ RUN cd /build && wget -q -O libpng.tgz ${LIBPNG_URL} && tar xzf libpng.tgz && cd
       CC=riscv64-linux-musl-gcc CPPFLAGS=-I/opt/sysroot/include LDFLAGS=-L/opt/sysroot/lib && \
     make -j$(nproc) && make install
 RUN cd /build && wget -q -O links.tgz ${LINKS_URL} && tar xzf links.tgz && cd links-2.30 && \
-    ./configure --host=riscv64-linux-musl --enable-graphics --with-fb \
+    CC=riscv64-linux-musl-gcc CPPFLAGS=-I/opt/sysroot/include \
+      LDFLAGS="-static -L/opt/sysroot/lib" \
+      ./configure --host=riscv64-linux-musl --enable-graphics --with-fb \
       --without-x --without-directfb --without-libjpeg --without-libtiff --without-openmp \
-      --without-ssl --without-zstd --without-brotli --without-freetype --without-librsvg \
-      CC=riscv64-linux-musl-gcc CPPFLAGS=-I/opt/sysroot/include \
-      LDFLAGS="-static -L/opt/sysroot/lib" && \
+      --without-ssl --without-zstd --without-brotli --without-freetype --without-librsvg && \
     make -j$(nproc) && \
     cp links /build/initramfs/bin/links && \
     file /build/initramfs/bin/links | grep -q 'statically linked' && \
