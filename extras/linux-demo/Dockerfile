@@ -69,10 +69,10 @@ RUN apt-get update -q && apt-get install -y -q autoconf automake libtool && \
     ./autogen.sh && \
     CC=riscv64-linux-musl-gcc LDFLAGS=-static \
       ./configure --host=riscv64-linux-musl --prefix=/opt/sysroot --without-curses && \
-    make -C src -j$(nproc) lib/libgpm.a prog/gpm && \
+    make -C src -j$(nproc) gpm lib/libgpm.a && \
     cp src/lib/libgpm.a /opt/sysroot/lib/ && \
     cp src/headers/gpm.h /opt/sysroot/include/ && \
-    cp src/prog/gpm /build/initramfs/bin/gpm && \
+    cp src/gpm /build/initramfs/bin/gpm && \
     file /build/initramfs/bin/gpm | grep -q 'statically linked'
 RUN mkdir -p /opt/sysroot && cd /build && \
     wget -q -O zlib.tgz ${ZLIB_URL} && tar xzf zlib.tgz && cd zlib-1.3.1 && \
