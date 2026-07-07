@@ -95,7 +95,7 @@ RUN cd /build && tar xzf links.tgz && cd links-2.30 && \
     make -j$(nproc) && \
     cp links /build/initramfs/bin/links && \
     file /build/initramfs/bin/links | grep -q 'statically linked' && \
-    printf '#!/bin/sh\nexec links -g "${1:-http://raw.githubusercontent.com/vonwao/rvemu/main/README.md}"\n' > /build/initramfs/bin/browse && \
+    printf '#!/bin/sh\n# links -g needs a real VT; the shell is on the serial console, so point\n# links at tty1 (the framebuffer the page mirrors to its canvas).\nexec setsid sh -c '"'"'exec links -g "${1:-http://raw.githubusercontent.com/vonwao/rvemu/main/README.md}" </dev/tty1 >/dev/tty1 2>&1'"'"' -- "$@"\n' > /build/initramfs/bin/browse && \
     chmod +x /build/initramfs/bin/browse
 
 RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\nfile /bin/fbdoom /build/initramfs/bin/fbdoom 0755 0 0\nfile /bin/doom /build/initramfs/bin/doom 0755 0 0\nfile /doom1.wad /build/initramfs/doom1.wad 0644 0 0\nfile /bin/links /build/initramfs/bin/links 0755 0 0\nfile /bin/browse /build/initramfs/bin/browse 0755 0 0\nfile /bin/gpm /build/initramfs/bin/gpm 0755 0 0\n' >> /build/initramfs.list && \
