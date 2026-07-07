@@ -98,7 +98,26 @@ RUN cd /build && tar xzf links.tgz && cd links-2.30 && \
     printf '#!/bin/sh\n# links -g needs a real VT; the shell is on the serial console, so point\n# links at tty1 (the framebuffer the page mirrors to its canvas).\nexec setsid sh -c '"'"'exec links -g "${1:-http://raw.githubusercontent.com/vonwao/rvemu/main/README.md}" </dev/tty1 >/dev/tty1 2>&1'"'"' -- "$@"\n' > /build/initramfs/bin/browse && \
     chmod +x /build/initramfs/bin/browse
 
-RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\nfile /bin/fbdoom /build/initramfs/bin/fbdoom 0755 0 0\nfile /bin/doom /build/initramfs/bin/doom 0755 0 0\nfile /doom1.wad /build/initramfs/doom1.wad 0644 0 0\nfile /bin/links /build/initramfs/bin/links 0755 0 0\nfile /bin/browse /build/initramfs/bin/browse 0755 0 0\nfile /bin/gpm /build/initramfs/bin/gpm 0755 0 0\n' >> /build/initramfs.list && \
+# curl (pinned, HTTP-only): the page gateway bridges guest TCP:80 to fetch()
+# and terminates TLS on the page side, so curl is built --without-ssl (same
+# deal as busybox wget and links). Static musl; sysroot zlib for gzip
+# transfer decoding. GitHub release mirror; sha256 matches curl.se's published
+# hash for 8.10.1.
+ARG CURL_URL=https://github.com/curl/curl/releases/download/curl-8_10_1/curl-8.10.1.tar.gz
+ARG CURL_SHA256=d15ebab765d793e2e96db090f0e172d127859d78ca6f6391d7eafecfd894bbc0
+RUN cd /build && wget -q -O curl.tgz ${CURL_URL} && \
+    echo "${CURL_SHA256}  curl.tgz" | sha256sum -c - && \
+    tar xzf curl.tgz && cd curl-8.10.1 && \
+    CC=riscv64-linux-musl-gcc CPPFLAGS=-I/opt/sysroot/include \
+      LDFLAGS="-static -L/opt/sysroot/lib" \
+      ./configure --host=riscv64-linux-musl --disable-shared --enable-static \
+      --without-ssl --without-libpsl --with-zlib=/opt/sysroot \
+      --disable-manual --disable-ldap && \
+    make -j$(nproc) -C lib && make -j$(nproc) -C src && \
+    cp src/curl /build/initramfs/bin/curl && \
+    file /build/initramfs/bin/curl | grep -q 'statically linked'
+
+RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\nfile /bin/fbdoom /build/initramfs/bin/fbdoom 0755 0 0\nfile /bin/doom /build/initramfs/bin/doom 0755 0 0\nfile /doom1.wad /build/initramfs/doom1.wad 0644 0 0\nfile /bin/links /build/initramfs/bin/links 0755 0 0\nfile /bin/browse /build/initramfs/bin/browse 0755 0 0\nfile /bin/gpm /build/initramfs/bin/gpm 0755 0 0\nfile /bin/curl /build/initramfs/bin/curl 0755 0 0\n' >> /build/initramfs.list && \
     cd /build/linux-6.12 && \
     make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- olddefconfig && \
     make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc) Image && \

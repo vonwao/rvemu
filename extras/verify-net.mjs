@@ -97,6 +97,11 @@ const wgetOk = await runPaced(() => raw.includes('WGET-0') && raw.includes('hell
 check(wgetOk, 'WGET-STUB-OK');
 check(raw.includes(`SIZE-${STUB_BODY.length}`), 'WGET-STUB-LENGTH-OK');
 
+send('curl -s http://stub.test/hello -o /c; echo CURL-$?; head -c 23 /c; echo; echo CSIZE-$(wc -c < /c)\r');
+const curlOk = await runPaced(() => raw.includes('CURL-0') && /CSIZE-\d/.test(raw), 60000);
+check(curlOk, 'CURL-STUB-OK');
+check(raw.includes(`CSIZE-${STUB_BODY.length}`), 'CURL-STUB-LENGTH-OK');
+
 if (live) {
   send('wget -qO- http://raw.githubusercontent.com/vonwao/rvemu/main/README.md | head -1; echo LIVE-DONE\r');
   const liveOk = await runPaced(() => raw.includes('LIVE-DONE'), 120000);
