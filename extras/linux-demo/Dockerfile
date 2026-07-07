@@ -73,6 +73,7 @@ RUN apt-get update -q && apt-get install -y -q autoconf automake libtool && \
     CC=riscv64-linux-musl-gcc LDFLAGS=-static \
       ./configure --host=riscv64-linux-musl --prefix=/opt/sysroot --without-curses && \
     make -C src -j$(nproc) gpm lib/libgpm.a && \
+    mkdir -p /opt/sysroot/lib /opt/sysroot/include && \
     cp src/lib/libgpm.a /opt/sysroot/lib/ && \
     cp src/headers/gpm.h /opt/sysroot/include/ && \
     cp src/gpm /build/initramfs/bin/gpm && \
