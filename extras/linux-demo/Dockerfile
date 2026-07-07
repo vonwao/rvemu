@@ -57,7 +57,9 @@ RUN wget -q -O /build/initramfs/doom1.wad https://distro.ibiblio.org/slitaz/sour
 # plain http (the page gateway terminates TLS). Static musl with zlib+libpng.
 ARG ZLIB_URL=https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
 ARG LIBPNG_URL=https://downloads.sourceforge.net/project/libpng/libpng16/1.6.43/libpng-1.6.43.tar.gz
-ARG LINKS_URL=http://links.twibright.com/download/links-2.30.tar.gz
+# links tarball is pre-fetched by build-linux-demo.sh (twibright.com is not
+# reliably reachable from inside Docker) and sha256-verified there.
+COPY links-2.30.tar.gz /build/links.tgz
 RUN mkdir -p /opt/sysroot && cd /build && \
     wget -q -O zlib.tgz ${ZLIB_URL} && tar xzf zlib.tgz && cd zlib-1.3.1 && \
     CC=riscv64-linux-musl-gcc ./configure --static --prefix=/opt/sysroot && \
@@ -66,7 +68,7 @@ RUN cd /build && wget -q -O libpng.tgz ${LIBPNG_URL} && tar xzf libpng.tgz && cd
     ./configure --host=riscv64-linux-musl --disable-shared --prefix=/opt/sysroot \
       CC=riscv64-linux-musl-gcc CPPFLAGS=-I/opt/sysroot/include LDFLAGS=-L/opt/sysroot/lib && \
     make -j$(nproc) && make install
-RUN cd /build && wget -q -O links.tgz ${LINKS_URL} && tar xzf links.tgz && cd links-2.30 && \
+RUN cd /build && tar xzf links.tgz && cd links-2.30 && \
     CC=riscv64-linux-musl-gcc CPPFLAGS=-I/opt/sysroot/include \
       LDFLAGS="-static -L/opt/sysroot/lib" \
       ./configure --host=riscv64-linux-musl --enable-graphics --with-fb \
