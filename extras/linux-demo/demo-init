@@ -13,5 +13,7 @@ if ifconfig eth0 10.0.2.15 netmask 255.255.255.0 up 2>/dev/null; then
   echo 'nameserver 10.0.2.3' > /etc/resolv.conf
   echo "initramfs: eth0 up (10.0.2.15)"
 fi
+# Console mouse daemon for links -g (harmless no-op if device missing).
+gpm -m /dev/input/mice -t imps2 2>/dev/null
 echo "initramfs: init complete"
 exec setsid sh -c 'stty rows 24 cols 80 </dev/ttyS0; exec sh </dev/ttyS0 >/dev/ttyS0 2>&1'

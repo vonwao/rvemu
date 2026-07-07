@@ -57,9 +57,21 @@ RUN wget -q -O /build/initramfs/doom1.wad https://distro.ibiblio.org/slitaz/sour
 # plain http (the page gateway terminates TLS). Static musl with zlib+libpng.
 ARG ZLIB_URL=https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
 ARG LIBPNG_URL=https://downloads.sourceforge.net/project/libpng/libpng16/1.6.43/libpng-1.6.43.tar.gz
-# links tarball is pre-fetched by build-linux-demo.sh (twibright.com is not
-# reliably reachable from inside Docker) and sha256-verified there.
+# links + gpm tarballs are pre-fetched by build-linux-demo.sh (twibright.com
+# is not reliably reachable from inside Docker) and sha256-verified there.
 COPY links-2.30.tar.gz /build/links.tgz
+COPY gpm-1.20.7.tar.gz /build/gpm.tgz
+
+# gpm: links2's fb driver requires libgpm at build time and the gpm daemon
+# at runtime for the mouse (kernel mousedev -> gpm -> links).
+RUN apt-get update -q && apt-get install -y -q autoconf automake && \
+    cd /build && tar xzf gpm.tgz && cd gpm-1.20.7 && \
+    ./autogen.sh && \
+    CC=riscv64-linux-musl-gcc LDFLAGS=-static \
+      ./configure --host=riscv64-linux-musl --prefix=/opt/sysroot --without-curses && \
+    make -j$(nproc) && make install && \
+    cp src/prog/gpm /build/initramfs/bin/gpm && \
+    file /build/initramfs/bin/gpm | grep -q 'statically linked'
 RUN mkdir -p /opt/sysroot && cd /build && \
     wget -q -O zlib.tgz ${ZLIB_URL} && tar xzf zlib.tgz && cd zlib-1.3.1 && \
     CC=riscv64-linux-musl-gcc ./configure --static --prefix=/opt/sysroot && \
@@ -80,7 +92,7 @@ RUN cd /build && tar xzf links.tgz && cd links-2.30 && \
     printf '#!/bin/sh\nexec links -g "${1:-http://raw.githubusercontent.com/vonwao/rvemu/main/README.md}"\n' > /build/initramfs/bin/browse && \
     chmod +x /build/initramfs/bin/browse
 
-RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\nfile /bin/fbdoom /build/initramfs/bin/fbdoom 0755 0 0\nfile /bin/doom /build/initramfs/bin/doom 0755 0 0\nfile /doom1.wad /build/initramfs/doom1.wad 0644 0 0\nfile /bin/links /build/initramfs/bin/links 0755 0 0\nfile /bin/browse /build/initramfs/bin/browse 0755 0 0\n' >> /build/initramfs.list && \
+RUN printf 'file /bin/tetris /build/initramfs/bin/tetris 0755 0 0\nfile /bin/fbdoom /build/initramfs/bin/fbdoom 0755 0 0\nfile /bin/doom /build/initramfs/bin/doom 0755 0 0\nfile /doom1.wad /build/initramfs/doom1.wad 0644 0 0\nfile /bin/links /build/initramfs/bin/links 0755 0 0\nfile /bin/browse /build/initramfs/bin/browse 0755 0 0\nfile /bin/gpm /build/initramfs/bin/gpm 0755 0 0\n' >> /build/initramfs.list && \
     cd /build/linux-6.12 && \
     make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- olddefconfig && \
     make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc) Image && \
