@@ -79,3 +79,11 @@ Dated, ordered, descriptive. Pass/fail claims are only restated here after the h
 - **DOOM-VERIFIED** (`extras/verify-doom.mjs`): input device bound by name in /proc/bus/input/devices; injected key events read back byte-exact from /dev/input/event0 inside the guest (48 bytes for keydown+SYN); `doom` launches and draws a rich frame (369,724 nonzero fb bytes, 201 distinct values).
 - **Battery on the changed tree**: unit tests 5/5, riscv-tests 106/108 (known pair), RISCOF 136/136, xv6 + linux BOOT-OK, DEMO-VERIFIED, NET-VERIFIED (incl. live), bounded Linux lockstep vs Spike PREFIX-CLEAN (rc=3).
 - Published to gh-pages; served ELF sha256 `67628090…`.
+
+## 2026-07-06 — Extras: curl in the demo image
+
+- **curl 8.10.1** (pinned sha256 from the GitHub release mirror, matches curl.se's published hash) added to the demo image: static musl, `--without-ssl` (the page gateway terminates TLS; the guest speaks plain HTTP on port 80, same as busybox wget and links), sysroot zlib for gzip transfer decoding.
+- **Build gotcha for the record**: curl links through libtool, and libtool silently swallows a plain `-static` (it never reaches the compiler) — the first build produced a dynamically linked binary that failed the layer's own static-link assertion. Fix: `make -C src LDFLAGS="-all-static"`. gpm/links never hit this because their final links don't go through libtool.
+- **Verified** (`extras/verify-net.mjs`, now with curl checks): hermetic in-guest `curl -o` of the stubbed URL, exit code 0 and exact length match (40,023 bytes) — **CURL-STUB-OK / CURL-STUB-LENGTH-OK**; full run **NET-VERIFIED** including the live README wget.
+- **Image re-verification** (artifact changed — kernel repack): **DEMO-VERIFIED**, **DOOM-VERIFIED** (rich-frame numbers byte-identical to the v5 certification). No Rust changed; certified targets/harness untouched.
+- Session coordination note: this build also carries the links2 sprint's browse-on-tty1 fix (committed by the parallel session); links verification and the next gh-pages publish remain with that sprint.
