@@ -67,6 +67,9 @@ COPY gpm-1.20.7.tar.gz /build/gpm.tgz
 RUN apt-get update -q && apt-get install -y -q autoconf automake libtool && \
     cd /build && tar xzf gpm.tgz && cd gpm-1.20.7 && \
     ./autogen.sh && \
+    grep -q '#include <fcntl.h>' src/daemon/open_console.c && \
+    sed -i 's|#include <fcntl.h>                  /\* open and co.      \*/|#include <fcntl.h>\n#include <sys/sysmacros.h> /* major() on musl */|' src/daemon/open_console.c && \
+    grep -q sysmacros src/daemon/open_console.c && \
     CC=riscv64-linux-musl-gcc LDFLAGS=-static \
       ./configure --host=riscv64-linux-musl --prefix=/opt/sysroot --without-curses && \
     make -C src -j$(nproc) gpm lib/libgpm.a && \
